@@ -9,6 +9,7 @@
 [node name="Main" type="Node2D"]
 
 [node name="GameBoard" parent="." instance=ExtResource("1_o5qli")]
+knight_warning_time = 1.0
 
 [node name="Player" parent="." instance=ExtResource("2_0wfyh")]
 position = Vector2(400, 400)
@@ -18,5 +19,8 @@ position = Vector2(400, 400)
 [node name="ScoreUI" parent="." instance=ExtResource("3_sugp2")]
 
 [node name="HazardSpawner" parent="." instance=ExtResource("4_jyhfs")]
+min_interval = 0.5
+difficulty_scale = 0.7
+max_hazards_per_spawn = 5
 
 [node name="GameOverUI" parent="." instance=ExtResource("5_tbgi4")]

@@ -3,6 +3,7 @@ extends CanvasLayer
 var container: Control
 var game_over_label: Label
 var score_label: Label
+var highscore_label: Label
 var restart_label: Label
 var menu_label: Label
 var final_score: int = 0
@@ -29,17 +30,22 @@ func _setup_ui() -> void:
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(container)
 	
+	# Dark overlay
 	var overlay = ColorRect.new()
 	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	overlay.color = Color(0, 0, 0, 0.7)
 	container.add_child(overlay)
 	
+	# Center content
 	var center = VBoxContainer.new()
 	center.set_anchors_preset(Control.PRESET_CENTER)
-	center.position = Vector2(-150, -120)
-	center.custom_minimum_size = Vector2(300, 240)
+	center.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	center.grow_vertical = Control.GROW_DIRECTION_BOTH
+	center.position = Vector2(-150, -140)
+	center.custom_minimum_size = Vector2(300, 280)
 	container.add_child(center)
 	
+	# "GAME OVER"
 	game_over_label = Label.new()
 	game_over_label.text = "GAME OVER"
 	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -47,10 +53,9 @@ func _setup_ui() -> void:
 	game_over_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
 	center.add_child(game_over_label)
 	
-	var spacer1 = Control.new()
-	spacer1.custom_minimum_size = Vector2(0, 20)
-	center.add_child(spacer1)
+	_add_spacer(center, 20)
 	
+	# Score
 	score_label = Label.new()
 	score_label.text = "Score: 0"
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -58,10 +63,19 @@ func _setup_ui() -> void:
 	score_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
 	center.add_child(score_label)
 	
-	var spacer2 = Control.new()
-	spacer2.custom_minimum_size = Vector2(0, 40)
-	center.add_child(spacer2)
+	_add_spacer(center, 5)
 	
+	# High score
+	highscore_label = Label.new()
+	highscore_label.text = ""
+	highscore_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	highscore_label.add_theme_font_size_override("font_size", 20)
+	highscore_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	center.add_child(highscore_label)
+	
+	_add_spacer(center, 30)
+	
+	# Restart instruction
 	restart_label = Label.new()
 	restart_label.text = "Press SPACE to restart"
 	restart_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -69,12 +83,11 @@ func _setup_ui() -> void:
 	restart_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	center.add_child(restart_label)
 	
-	var spacer3 = Control.new()
-	spacer3.custom_minimum_size = Vector2(0, 10)
-	center.add_child(spacer3)
+	_add_spacer(center, 8)
 	
+	# Menu instruction
 	menu_label = Label.new()
-	menu_label.text = "Press ESC for menu"
+	menu_label.text = "ESC for menu"
 	menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_label.add_theme_font_size_override("font_size", 18)
 	menu_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
@@ -82,18 +95,26 @@ func _setup_ui() -> void:
 	
 	_pulse_restart_label()
 
+func _add_spacer(parent: Control, height: float) -> void:
+	var spacer = Control.new()
+	spacer.custom_minimum_size = Vector2(0, height)
+	parent.add_child(spacer)
+
 func _pulse_restart_label() -> void:
 	var tween = create_tween()
 	tween.set_loops()
 	tween.tween_property(restart_label, "modulate:a", 0.4, 0.6).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(restart_label, "modulate:a", 1.0, 0.6).set_trans(Tween.TRANS_SINE)
 
-func _process(_delta: float) -> void:
-	if container.visible and not is_restarting:
-		if Input.is_action_just_pressed("press_button"):
-			_restart_game()
-		elif Input.is_action_just_pressed("ui_cancel"):
+func _unhandled_input(event: InputEvent) -> void:
+	if not container.visible or is_restarting:
+		return
+	
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE:
 			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+		elif event.keycode == KEY_SPACE or event.keycode == KEY_E or event.keycode == KEY_ENTER:
+			_restart_game()
 
 func _on_player_died() -> void:
 	final_score = game_board.score
@@ -104,12 +125,14 @@ func show_game_over() -> void:
 	is_restarting = false
 	score_label.text = "Score: " + str(final_score)
 	
-	if final_score >= GameSettings.high_score:
-		score_label.text += " (NEW HIGH!)"
+	if final_score >= GameSettings.high_score and final_score > 0:
+		highscore_label.text = "NEW HIGH SCORE!"
+	else:
+		highscore_label.text = "Best: " + str(GameSettings.high_score)
 	
 	container.visible = true
-	container.modulate.a = 1.0
 	
+	# Animate in
 	container.modulate.a = 0
 	var tween = create_tween()
 	tween.tween_property(container, "modulate:a", 1.0, 0.3)
@@ -127,7 +150,7 @@ func _restart_game() -> void:
 	
 	var tween = create_tween()
 	tween.tween_property(container, "modulate:a", 0.0, 0.2)
-	tween.tween_callback(func(): 
+	tween.tween_callback(func():
 		container.visible = false
 		container.modulate.a = 1.0
 	)

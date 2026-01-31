@@ -15,6 +15,9 @@ var sprite: Sprite2D
 var glow: Sprite2D
 var king_texture: Texture2D
 
+# Track keys pressed this frame for clean "just pressed" on raw keycodes
+var _keys_this_frame: Array = []
+
 func _ready() -> void:
 	game_board = get_parent().get_node("GameBoard")
 	grid_size = game_board.grid_size
@@ -49,20 +52,34 @@ func _setup_visuals() -> void:
 	tween.tween_property(glow, "modulate:a", 0.7, 0.4).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(glow, "modulate:a", 0.3, 0.4).set_trans(Tween.TRANS_SINE)
 
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		_keys_this_frame.append(event.keycode)
+
 func _process(_delta: float) -> void:
 	if is_moving or is_dead:
+		_keys_this_frame.clear()
 		return
 	
-	if Input.is_action_just_pressed("move_left"):
+	# Both input actions (arrows) and raw keys (WASD)
+	var move_left = Input.is_action_just_pressed("move_left") or KEY_A in _keys_this_frame
+	var move_right = Input.is_action_just_pressed("move_right") or KEY_D in _keys_this_frame
+	var move_up = Input.is_action_just_pressed("move_up") or KEY_W in _keys_this_frame
+	var move_down = Input.is_action_just_pressed("move_down") or KEY_S in _keys_this_frame
+	var press = Input.is_action_just_pressed("press_button") or KEY_E in _keys_this_frame or KEY_SPACE in _keys_this_frame
+	
+	_keys_this_frame.clear()
+	
+	if move_left:
 		_try_move(Vector2i.LEFT)
-	elif Input.is_action_just_pressed("move_right"):
+	elif move_right:
 		_try_move(Vector2i.RIGHT)
-	elif Input.is_action_just_pressed("move_up"):
+	elif move_up:
 		_try_move(Vector2i.UP)
-	elif Input.is_action_just_pressed("move_down"):
+	elif move_down:
 		_try_move(Vector2i.DOWN)
 	
-	if Input.is_action_just_pressed("press_button"):
+	if press:
 		_try_press()
 
 func _try_move(direction: Vector2i) -> void:
@@ -70,7 +87,6 @@ func _try_move(direction: Vector2i) -> void:
 	
 	if new_pos.x < 0 or new_pos.x >= grid_size or new_pos.y < 0 or new_pos.y >= grid_size:
 		var hit = game_board.try_wall_press(grid_pos, direction)
-		
 		if hit:
 			_do_wall_hit_animation(direction)
 		else:
@@ -125,7 +141,6 @@ func _do_wall_hit_animation(direction: Vector2i) -> void:
 
 func _try_press() -> void:
 	var hit = game_board.try_floor_press(grid_pos)
-	
 	if hit:
 		_do_press_hit_animation()
 	else:
@@ -164,6 +179,7 @@ func reset() -> void:
 	rotation = 0
 	is_moving = false
 	is_dead = false
+	_keys_this_frame.clear()
 	
 	sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	glow.modulate = Color(1.0, 0.8, 0.0, 0.5)

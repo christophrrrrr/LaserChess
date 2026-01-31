@@ -1,14 +1,28 @@
 extends Node2D
 
-# Configuration
+# === BOARD LAYOUT ===
+@export_group("Board Layout")
 @export var grid_size: int = 6
 @export var tile_size: float = 80.0
 @export var wall_thickness: float = 30.0
 @export var tile_gap: float = 4.0
 
-# Hazard configuration
-@export var hazard_warning_time: float = 0.8
-@export var hazard_move_speed: float = 0.08
+# === HAZARD TIMING ===
+@export_group("Rook & Bishop")
+@export var hazard_warning_time: float = 0.8  ## How long danger squares pulse red before piece moves
+@export var hazard_slide_speed: float = 0.08  ## Time per tile when piece slides through
+@export var hazard_flash_duration: float = 0.04  ## White flash duration per tile
+
+@export_group("Knight")
+@export var knight_warning_time: float = 0.4  ## Warning time before each knight jump
+@export var knight_pause_between: float = 0.1  ## Pause between knight jumps
+@export var knight_num_jumps: int = 3  ## Number of L-shaped jumps per knight
+
+@export_group("Piece Visuals")
+@export var piece_fade_in_time: float = 0.2
+@export var piece_fade_out_time: float = 0.2
+@export var piece_sprite_scale: float = 0.8  ## Fraction of tile size
+@export var piece_glow_scale: float = 1.2  ## Glow relative to piece
 
 # Store references to all squares
 var floor_squares: Array = []
@@ -17,7 +31,7 @@ var wall_squares: Dictionary = {}
 # Track active targets
 var active_targets: Array = []
 
-# Track danger zones - now tracks count per square (for overlapping hazards)
+# Track danger zones with reference counting (for overlapping hazards)
 var danger_count: Dictionary = {}  # Vector2i -> int
 
 # Track active hazards
@@ -106,6 +120,7 @@ func _create_wall_squares(offset: float, board_pixel_size: float) -> void:
 		top_square.set_meta("is_wall", true)
 		top_square.set_meta("wall_side", "top")
 		top_square.set_meta("is_target", false)
+		top_square.set_meta("is_danger", false)
 		add_child(top_square)
 		wall_squares["top"].append(top_square)
 		
@@ -115,6 +130,7 @@ func _create_wall_squares(offset: float, board_pixel_size: float) -> void:
 		bottom_square.set_meta("is_wall", true)
 		bottom_square.set_meta("wall_side", "bottom")
 		bottom_square.set_meta("is_target", false)
+		bottom_square.set_meta("is_danger", false)
 		add_child(bottom_square)
 		wall_squares["bottom"].append(bottom_square)
 	
@@ -127,6 +143,7 @@ func _create_wall_squares(offset: float, board_pixel_size: float) -> void:
 		left_square.set_meta("is_wall", true)
 		left_square.set_meta("wall_side", "left")
 		left_square.set_meta("is_target", false)
+		left_square.set_meta("is_danger", false)
 		add_child(left_square)
 		wall_squares["left"].append(left_square)
 		
@@ -136,6 +153,7 @@ func _create_wall_squares(offset: float, board_pixel_size: float) -> void:
 		right_square.set_meta("is_wall", true)
 		right_square.set_meta("wall_side", "right")
 		right_square.set_meta("is_target", false)
+		right_square.set_meta("is_danger", false)
 		add_child(right_square)
 		wall_squares["right"].append(right_square)
 
@@ -163,6 +181,9 @@ func get_floor_square(grid_pos: Vector2i) -> Node2D:
 		return floor_squares[index]
 	return null
 
+func _is_square_in_danger(square: Node2D) -> bool:
+	return square.has_meta("is_danger") and square.get_meta("is_danger")
+
 func _stop_square_tween(square: Node2D, tween_name: String) -> void:
 	if square.has_meta(tween_name):
 		var tween = square.get_meta(tween_name) as Tween
@@ -184,14 +205,14 @@ func _create_chess_piece_sprite(texture: Texture2D) -> Sprite2D:
 	container.texture = texture
 	
 	var tex_size = texture.get_size()
-	var target_size = tile_size * 0.8
+	var target_size = tile_size * piece_sprite_scale
 	var scale_factor = target_size / max(tex_size.x, tex_size.y)
 	container.scale = Vector2(scale_factor, scale_factor)
 	container.modulate = Color(1.0, 1.0, 1.0, 0.9)
 	
 	var glow = Sprite2D.new()
 	glow.texture = texture
-	glow.scale = Vector2(1.2, 1.2)
+	glow.scale = Vector2(piece_glow_scale, piece_glow_scale)
 	glow.modulate = Color(1.0, 0.0, 0.0, 0.5)
 	glow.z_index = -1
 	container.add_child(glow)
@@ -252,7 +273,7 @@ func _activate_target(square: Node2D) -> void:
 	var target_color = color_wall_target if is_wall else color_floor_target
 	
 	# Only start pulse if not in danger
-	if not square.get_meta("is_danger"):
+	if not _is_square_in_danger(square):
 		_stop_square_tween(square, "pulse_tween")
 		
 		rect.color = Color.WHITE
@@ -265,7 +286,7 @@ func _activate_target(square: Node2D) -> void:
 		tween.chain().tween_callback(_start_pulse.bind(square, target_color))
 
 func _start_pulse(square: Node2D, base_color: Color) -> void:
-	if is_resetting or square.get_meta("is_danger"):
+	if is_resetting or _is_square_in_danger(square):
 		return
 	
 	_stop_square_tween(square, "pulse_tween")
@@ -337,8 +358,8 @@ func _deactivate_target(square: Node2D) -> void:
 	var rect = square.get_meta("rect") as ColorRect
 	var is_wall = square.get_meta("is_wall")
 	
-	# If in danger, keep danger color; otherwise go to normal
-	if square.get_meta("is_danger"):
+	# If in danger, keep danger color; otherwise animate to normal
+	if _is_square_in_danger(square):
 		rect.color = color_floor_danger
 	else:
 		var normal_color = color_wall_normal if is_wall else color_floor_normal
@@ -445,35 +466,41 @@ func _get_valid_knight_moves(from_pos: Vector2i) -> Array[Vector2i]:
 	
 	return valid_moves
 
+# =====================
+# DANGER SYSTEM (ref-counted)
+# =====================
+
 func _mark_danger(pos: Vector2i) -> void:
 	if pos not in danger_count:
 		danger_count[pos] = 0
 	danger_count[pos] += 1
 	
 	var square = get_floor_square(pos)
-	if square and not square.get_meta("is_danger"):
+	if square and not _is_square_in_danger(square):
 		square.set_meta("is_danger", true)
 		_stop_square_tween(square, "pulse_tween")
 		_start_danger_pulse(square)
 
 func _unmark_danger(pos: Vector2i) -> void:
-	if pos in danger_count:
-		danger_count[pos] -= 1
-		if danger_count[pos] <= 0:
-			danger_count.erase(pos)
+	if pos not in danger_count:
+		return
+	
+	danger_count[pos] -= 1
+	if danger_count[pos] <= 0:
+		danger_count.erase(pos)
+		
+		var square = get_floor_square(pos)
+		if square:
+			square.set_meta("is_danger", false)
+			_stop_square_tween(square, "danger_tween")
 			
-			var square = get_floor_square(pos)
-			if square:
-				square.set_meta("is_danger", false)
-				_stop_square_tween(square, "danger_tween")
-				
-				var rect = square.get_meta("rect") as ColorRect
-				var base_color = _get_square_base_color(square)
-				rect.color = base_color
-				
-				# Restart pulse if it's a target
-				if square.get_meta("is_target"):
-					_start_pulse(square, base_color)
+			var rect = square.get_meta("rect") as ColorRect
+			var base_color = _get_square_base_color(square)
+			rect.color = base_color
+			
+			# Restart pulse if it's a target
+			if square.get_meta("is_target"):
+				_start_pulse(square, base_color)
 
 func _start_danger_pulse(square: Node2D) -> void:
 	_stop_square_tween(square, "danger_tween")
@@ -481,15 +508,19 @@ func _start_danger_pulse(square: Node2D) -> void:
 	var rect = square.get_meta("rect") as ColorRect
 	var base_color = _get_square_base_color(square)
 	
-	# Start at danger color
 	rect.color = color_floor_danger
 	
 	var tween = create_tween()
-	tween.set_loops()  # Infinite loops until stopped
+	tween.set_loops()
 	tween.tween_property(rect, "color", base_color.lerp(color_floor_danger, 0.5), 0.1)
 	tween.tween_property(rect, "color", color_floor_danger, 0.1)
 	
 	square.set_meta("danger_tween", tween)
+
+
+# =====================
+# KNIGHT HAZARD
+# =====================
 
 func _execute_knight_hazard(start_pos: Vector2i) -> void:
 	if is_resetting:
@@ -503,7 +534,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 	pieces_container.add_child(piece)
 	
 	var fade_in = create_tween()
-	fade_in.tween_property(piece, "modulate:a", 1.0, 0.2)
+	fade_in.tween_property(piece, "modulate:a", 1.0, piece_fade_in_time)
 	await fade_in.finished
 	
 	if is_resetting or not is_instance_valid(piece):
@@ -513,10 +544,8 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		return
 	
 	var current_pos = start_pos
-	var jump_warning_time = 0.4
-	var num_jumps = 3
 	
-	for i in range(num_jumps):
+	for i in range(knight_num_jumps):
 		if is_resetting or not is_instance_valid(piece):
 			if is_instance_valid(piece):
 				piece.queue_free()
@@ -530,10 +559,9 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		
 		var target_pos = valid_moves[randi() % valid_moves.size()]
 		
-		# Mark danger
 		_mark_danger(target_pos)
 		
-		await get_tree().create_timer(jump_warning_time).timeout
+		await get_tree().create_timer(knight_warning_time).timeout
 		
 		if is_resetting or not is_instance_valid(piece):
 			_unmark_danger(target_pos)
@@ -542,28 +570,20 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 			active_hazards -= 1
 			return
 		
-		# Check collision
-		if player and not player.is_dead:
-			if player.grid_pos == target_pos:
-				player_hit.emit()
-				player.die()
-		
-		# Teleport and flash
+		# Teleport piece, then check collision
 		piece.position = grid_to_world(target_pos)
 		_flash_square(target_pos)
 		
-		# Unmark danger
-		_unmark_danger(target_pos)
-		
-		# Check collision after landing
 		if player and not player.is_dead:
 			if player.grid_pos == target_pos:
 				player_hit.emit()
 				player.die()
 		
+		_unmark_danger(target_pos)
+		
 		current_pos = target_pos
 		
-		await get_tree().create_timer(0.1).timeout
+		await get_tree().create_timer(knight_pause_between).timeout
 	
 	if is_resetting or not is_instance_valid(piece):
 		if is_instance_valid(piece):
@@ -572,7 +592,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		return
 	
 	var fade_out = create_tween()
-	fade_out.tween_property(piece, "modulate:a", 0.0, 0.2)
+	fade_out.tween_property(piece, "modulate:a", 0.0, piece_fade_out_time)
 	fade_out.tween_callback(piece.queue_free)
 	
 	active_hazards -= 1
@@ -584,6 +604,10 @@ func _flash_square(pos: Vector2i) -> void:
 		rect.color = Color.WHITE
 		var flash_tween = create_tween()
 		flash_tween.tween_property(rect, "color", _get_square_base_color(square), 0.1)
+
+# =====================
+# ROOK / BISHOP HAZARD
+# =====================
 
 func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, start_pos: Vector2) -> void:
 	if positions.is_empty() or is_resetting:
@@ -597,12 +621,13 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 	pieces_container.add_child(piece)
 	
 	var fade_in = create_tween()
-	fade_in.tween_property(piece, "modulate:a", 1.0, 0.2)
+	fade_in.tween_property(piece, "modulate:a", 1.0, piece_fade_in_time)
 	
-	# Mark all positions as danger
+	# Mark all positions as danger (warning phase)
 	for pos in positions:
 		_mark_danger(pos)
 	
+	# Wait for warning — NO collision check here, player can still escape
 	await get_tree().create_timer(hazard_warning_time).timeout
 	
 	if is_resetting or not is_instance_valid(piece):
@@ -613,13 +638,7 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		active_hazards -= 1
 		return
 	
-	# Check collision
-	if player and not player.is_dead:
-		if player.grid_pos in positions:
-			player_hit.emit()
-			player.die()
-	
-	# Animate piece through positions
+	# Animate piece through — collision checked per tile as piece arrives
 	await _animate_sliding_piece(piece, positions)
 	
 	if is_resetting or not is_instance_valid(piece):
@@ -630,13 +649,13 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		active_hazards -= 1
 		return
 	
-	# Unmark all danger
+	# Clear all danger
 	for pos in positions:
 		_unmark_danger(pos)
 	
 	if is_instance_valid(piece):
 		var fade_out = create_tween()
-		fade_out.tween_property(piece, "modulate:a", 0.0, 0.2)
+		fade_out.tween_property(piece, "modulate:a", 0.0, piece_fade_out_time)
 		fade_out.tween_callback(piece.queue_free)
 	
 	active_hazards -= 1
@@ -649,30 +668,32 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 		var pos = positions[i]
 		var target_world = grid_to_world(pos)
 		
+		# Move piece to this square
 		if is_instance_valid(piece):
 			var move_tween = create_tween()
-			move_tween.tween_property(piece, "position", target_world, hazard_move_speed).set_trans(Tween.TRANS_LINEAR)
+			move_tween.tween_property(piece, "position", target_world, hazard_slide_speed).set_trans(Tween.TRANS_LINEAR)
 		
-		# Flash white then back to danger
+		# Wait for piece to arrive
+		await get_tree().create_timer(hazard_slide_speed).timeout
+		
+		if is_resetting or not is_instance_valid(piece):
+			return
+		
+		# Flash the square white as piece passes
 		var square = get_floor_square(pos)
 		if square:
 			var rect = square.get_meta("rect") as ColorRect
 			rect.color = Color.WHITE
 			var flash_tween = create_tween()
-			flash_tween.tween_property(rect, "color", color_floor_danger, 0.04)
+			flash_tween.tween_property(rect, "color", color_floor_danger, hazard_flash_duration)
 		
-		await get_tree().create_timer(hazard_move_speed).timeout
-		
-		if is_resetting or not is_instance_valid(piece):
-			return
-		
-		# Check collision
+		# Check collision AFTER piece has arrived at this square
 		if player and not player.is_dead:
 			if player.grid_pos == pos:
 				player_hit.emit()
 				player.die()
 	
-	# Exit animation
+	# Exit animation — piece slides off the board
 	if positions.size() >= 2 and is_instance_valid(piece):
 		var last_pos = grid_to_world(positions[-1])
 		var second_last_pos = grid_to_world(positions[-2])
@@ -680,7 +701,7 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 		var exit_pos = last_pos + direction * tile_size * 2
 		
 		var exit_tween = create_tween()
-		exit_tween.tween_property(piece, "position", exit_pos, hazard_move_speed * 2)
+		exit_tween.tween_property(piece, "position", exit_pos, hazard_slide_speed * 2)
 		await exit_tween.finished
 
 func spawn_random_hazard() -> void:
@@ -696,6 +717,10 @@ func spawn_random_hazard() -> void:
 			spawn_bishop_hazard()
 		2:
 			spawn_knight_hazard()
+
+# =====================
+# RESET
+# =====================
 
 func reset() -> void:
 	is_resetting = true
@@ -720,7 +745,9 @@ func reset() -> void:
 	for side in wall_squares:
 		for square in wall_squares[side]:
 			_stop_square_tween(square, "pulse_tween")
+			_stop_square_tween(square, "danger_tween")
 			square.set_meta("is_target", false)
+			square.set_meta("is_danger", false)
 			
 			var rect = square.get_meta("rect") as ColorRect
 			rect.color = color_wall_normal
