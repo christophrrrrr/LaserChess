@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b1edoxcad1l2e"
-path="res://.godot/imported/knight.png-b33800fb7ddfd7bcabc4517f1e9e68e8.ctex"
+uid="uid://ccde54d6orb1p"
+path="res://.godot/imported/rook1.png-545a0fd231553dfaff15d6411776ef27.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/knight.png"
-dest_files=["res://.godot/imported/knight.png-b33800fb7ddfd7bcabc4517f1e9e68e8.ctex"]
+source_file="res://assets/rook1.png"
+dest_files=["res://.godot/imported/rook1.png-545a0fd231553dfaff15d6411776ef27.ctex"]
 
 [params]
 

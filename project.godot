@@ -11,9 +11,13 @@ config_version=5
 [application]
 
 config/name="LaserChess"
-run/main_scene="uid://d4l4xdm13fk66"
+run/main_scene="uid://dsk0wxrjrfby"
 config/features=PackedStringArray("4.5", "Forward Plus")
-config/icon="res://assets/icon.svg"
+config/icon="uid://b3i2fx6g74qne"
+
+[autoload]
+
+GameSettings="*res://scripts/game_settings.gd"
 
 [display]
 
