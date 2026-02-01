@@ -1,29 +1,29 @@
 extends Node
 ## NetworkManager — autoload singleton
-## Handles WebSocket connection to the relay server.
+## WebSocket client for matchmaking lobby + score relay.
 
-# === CONFIG ===
-var server_url: String = "ws://localhost:8765"
-
-# === CONNECTION STATE ===
-enum State { DISCONNECTED, CONNECTING, CONNECTED, QUEUED, IN_MATCH }
-var state: State = State.DISCONNECTED
+# =============================================================
+# SERVER URL — change this to your Render URL!
+# Local testing:  "ws://localhost:8765"
+# Production:     "wss://your-app-name.onrender.com"
+# =============================================================
+var server_url: String = "wss://laserchess-webserver.onrender.com"
 
 # === SIGNALS ===
-signal connected()
-signal disconnected()
-signal queued()
-signal match_found(match_seed: int, opponent_name: String)
+signal connected_to_server(my_name: String)
+signal connection_failed()
+signal disconnected_from_server()
+signal lobby_updated(players: Array, total_online: int)
+signal match_started(seed_val: int, opponent_name: String)
 signal opponent_score_updated(best_score: int)
-signal match_result_received(result: String, my_score: int, opponent_score: int)
-signal opponent_disconnected(my_score: int, opponent_score: int)
-signal error_received(msg: String)
+signal opponent_disconnected()
+signal challenge_failed(msg: String)
 
-# === INTERNALS ===
+# === STATE ===
 var _socket: WebSocketPeer = null
-var _my_name: String = ""
-var _opponent_name: String = ""
-var _match_id: String = ""
+var _was_connected: bool = false
+var my_id: int = -1
+var my_name: String = ""
 
 func _ready() -> void:
 	set_process(false)
@@ -33,150 +33,99 @@ func _process(_delta: float) -> void:
 		return
 	
 	_socket.poll()
+	var state = _socket.get_ready_state()
 	
-	var socket_state = _socket.get_ready_state()
+	if state == WebSocketPeer.STATE_OPEN:
+		if not _was_connected:
+			_was_connected = true
+		while _socket.get_available_packet_count() > 0:
+			var text = _socket.get_packet().get_string_from_utf8()
+			_handle_message(text)
 	
-	match socket_state:
-		WebSocketPeer.STATE_OPEN:
-			if state == State.CONNECTING:
-				state = State.CONNECTED
-				connected.emit()
-			
-			# Read all available packets
-			while _socket.get_available_packet_count() > 0:
-				var packet = _socket.get_packet()
-				var text = packet.get_string_from_utf8()
-				_handle_message(text)
-		
-		WebSocketPeer.STATE_CLOSING:
-			pass  # Wait for close to finish
-		
-		WebSocketPeer.STATE_CLOSED:
-			var code = _socket.get_close_code()
-			print("[NET] Connection closed (code: ", code, ")")
-			_socket = null
-			state = State.DISCONNECTED
-			set_process(false)
-			disconnected.emit()
+	elif state == WebSocketPeer.STATE_CLOSED:
+		var was = _was_connected
+		_socket = null
+		_was_connected = false
+		set_process(false)
+		if was:
+			disconnected_from_server.emit()
+		else:
+			connection_failed.emit()
 
 # =====================
 # PUBLIC API
 # =====================
 
-func connect_to_server(url: String = "") -> void:
-	if url != "":
-		server_url = url
-	
-	if _socket != null:
-		_socket.close()
-		_socket = null
-	
+func connect_to_server() -> void:
+	disconnect_from_server()
 	_socket = WebSocketPeer.new()
 	var err = _socket.connect_to_url(server_url)
-	
 	if err != OK:
-		push_error("[NET] Failed to connect: ", err)
-		state = State.DISCONNECTED
-		error_received.emit("Failed to connect to server")
+		push_error("[NET] connect_to_url failed: ", err)
+		connection_failed.emit()
 		return
-	
-	state = State.CONNECTING
 	set_process(true)
-	print("[NET] Connecting to ", server_url)
 
-func join_queue() -> void:
-	_send({"type": "queue"})
+func disconnect_from_server() -> void:
+	if _socket != null:
+		_socket.close()
+	_socket = null
+	_was_connected = false
+	set_process(false)
 
-func leave_queue() -> void:
-	_send({"type": "leave_queue"})
-	state = State.CONNECTED
+## Use is_online() instead of is_connected() to avoid clash with Godot built-in.
+func is_online() -> bool:
+	return _was_connected and _socket != null
 
-func send_score_update(best_score: int) -> void:
+func join_lobby() -> void:
+	_send({"type": "join_lobby"})
+
+func leave_lobby() -> void:
+	_send({"type": "leave_lobby"})
+
+func challenge_player(target_id: int) -> void:
+	_send({"type": "challenge", "target_id": target_id})
+
+func send_score(best_score: int) -> void:
 	_send({"type": "score_update", "best_score": best_score})
 
 func send_match_end(best_score: int) -> void:
 	_send({"type": "match_end", "best_score": best_score})
 
-func disconnect_from_server() -> void:
-	if _socket != null:
-		_socket.close()
-	state = State.DISCONNECTED
-
-func is_connected_to_server() -> bool:
-	return state != State.DISCONNECTED and state != State.CONNECTING
-
-func get_my_name() -> String:
-	return _my_name
-
-func get_opponent_name() -> String:
-	return _opponent_name
+func rejoin_lobby() -> void:
+	_send({"type": "rejoin_lobby"})
 
 # =====================
-# MESSAGE HANDLING
+# INTERNAL
 # =====================
+
+func _send(data: Dictionary) -> void:
+	if _socket != null and _was_connected:
+		_socket.send_text(JSON.stringify(data))
 
 func _handle_message(text: String) -> void:
 	var json = JSON.new()
-	var err = json.parse(text)
-	if err != OK:
-		push_error("[NET] Bad JSON: ", text)
+	if json.parse(text) != OK:
 		return
-	
 	var data = json.data
 	if not data is Dictionary:
 		return
 	
 	var msg_type = data.get("type", "")
-	
 	match msg_type:
 		"welcome":
-			_my_name = data.get("name", "")
-			print("[NET] Server assigned name: ", _my_name)
-		
-		"queued":
-			state = State.QUEUED
-			queued.emit()
-			print("[NET] In queue, waiting for opponent...")
-		
-		"match_found":
-			state = State.IN_MATCH
-			_match_id = data.get("match_id", "")
-			_opponent_name = data.get("opponent", "???")
-			var match_seed = data.get("seed", 0)
-			match_found.emit(match_seed, _opponent_name)
-			print("[NET] Match found! vs ", _opponent_name, " seed=", match_seed)
-		
+			my_id = data.get("id", -1)
+			my_name = data.get("name", "")
+			connected_to_server.emit(my_name)
+		"lobby_list":
+			lobby_updated.emit(data.get("players", []), data.get("total_online", 0))
+		"match_start":
+			match_started.emit(data.get("seed", 0), data.get("opponent", "???"))
 		"opponent_score":
-			var best = data.get("best_score", 0)
-			opponent_score_updated.emit(best)
-		
+			opponent_score_updated.emit(data.get("best_score", 0))
 		"match_result":
-			var result = data.get("result", "draw")
-			var my_s = data.get("my_score", 0)
-			var opp_s = data.get("opponent_score", 0)
-			state = State.CONNECTED
-			_match_id = ""
-			match_result_received.emit(result, my_s, opp_s)
-			print("[NET] Match result: ", result, " (", my_s, " - ", opp_s, ")")
-		
+			pass  # Client determines result from local scores
 		"opponent_disconnected":
-			var my_s = data.get("my_score", 0)
-			var opp_s = data.get("opponent_score", 0)
-			state = State.CONNECTED
-			_match_id = ""
-			opponent_disconnected.emit(my_s, opp_s)
-			print("[NET] Opponent disconnected. Win by default.")
-		
-		"left_queue":
-			state = State.CONNECTED
-		
-		"error":
-			var msg = data.get("msg", "Unknown error")
-			error_received.emit(msg)
-			push_warning("[NET] Server error: ", msg)
-
-func _send(data: Dictionary) -> void:
-	if _socket == null or _socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
-		push_warning("[NET] Cannot send, not connected")
-		return
-	_socket.send_text(JSON.stringify(data))
+			opponent_disconnected.emit()
+		"challenge_failed":
+			challenge_failed.emit(data.get("msg", "Player unavailable"))
