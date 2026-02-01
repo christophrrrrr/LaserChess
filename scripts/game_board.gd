@@ -40,6 +40,9 @@ var active_hazards: int = 0
 # Score
 var score: int = 0
 
+# Seeded RNG — deterministic when seed is set, random otherwise
+var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+
 # Colors
 var color_floor_normal := Color(0.15, 0.15, 0.25)
 var color_floor_target := Color(0.0, 1.0, 0.6)
@@ -68,6 +71,9 @@ var is_resetting: bool = false
 var pieces_container: Node2D
 
 func _ready() -> void:
+	# Default: randomize (solo mode). Ranked mode calls set_match_seed() before play starts.
+	rng.randomize()
+	
 	_load_chess_pieces()
 	_create_board()
 	
@@ -78,6 +84,16 @@ func _ready() -> void:
 	spawn_target_square()
 	
 	player = get_parent().get_node("Player")
+
+# === SEEDED RNG API ===
+
+func set_match_seed(seed_value: int) -> void:
+	## Call this before the match starts to make hazards deterministic.
+	## Both players use the same seed → identical hazard sequences.
+	rng.seed = seed_value
+
+func get_current_seed() -> int:
+	return rng.seed
 
 func _load_chess_pieces() -> void:
 	var textures = GameSettings.get_enemy_textures()
@@ -234,7 +250,7 @@ func spawn_target_square() -> void:
 	if is_resetting:
 		return
 	
-	var spawn_wall = randf() < 0.2
+	var spawn_wall = rng.randf() < 0.2
 	
 	if spawn_wall:
 		_spawn_wall_target()
@@ -247,18 +263,18 @@ func _spawn_floor_target() -> void:
 	if available.is_empty():
 		return
 	
-	var square = available[randi() % available.size()]
+	var square = available[rng.randi() % available.size()]
 	_activate_target(square)
 
 func _spawn_wall_target() -> void:
 	var sides = ["top", "bottom", "left", "right"]
-	var side = sides[randi() % sides.size()]
+	var side = sides[rng.randi() % sides.size()]
 	var available = wall_squares[side].filter(func(sq): return not sq.get_meta("is_target"))
 	
 	if available.is_empty():
 		return
 	
-	var square = available[randi() % available.size()]
+	var square = available[rng.randi() % available.size()]
 	_activate_target(square)
 
 func _activate_target(square: Node2D) -> void:
@@ -375,9 +391,9 @@ func _deactivate_target(square: Node2D) -> void:
 # =====================
 
 func spawn_rook_hazard() -> void:
-	var is_row = randf() < 0.5
-	var index = randi() % grid_size
-	var reverse = randf() < 0.5
+	var is_row = rng.randf() < 0.5
+	var index = rng.randi() % grid_size
+	var reverse = rng.randf() < 0.5
 	
 	var positions: Array[Vector2i] = []
 	var start_pos: Vector2
@@ -405,11 +421,11 @@ func spawn_bishop_hazard() -> void:
 	var positions: Array[Vector2i] = []
 	var start_pos: Vector2
 	
-	var diagonal_type = randi() % 4
+	var diagonal_type = rng.randi() % 4
 	
 	match diagonal_type:
 		0:
-			var start_col = randi() % grid_size
+			var start_col = rng.randi() % grid_size
 			var col = start_col
 			var row = 0
 			while col < grid_size and row < grid_size:
@@ -418,7 +434,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(start_col - 1, -1))
 		1:
-			var start_row = randi() % grid_size
+			var start_row = rng.randi() % grid_size
 			var col = 0
 			var row = start_row
 			while col < grid_size and row < grid_size:
@@ -427,7 +443,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(-1, start_row - 1))
 		2:
-			var start_col = randi() % grid_size
+			var start_col = rng.randi() % grid_size
 			var col = start_col
 			var row = 0
 			while col >= 0 and row < grid_size:
@@ -436,7 +452,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(start_col + 1, -1))
 		3:
-			var start_row = randi() % grid_size
+			var start_row = rng.randi() % grid_size
 			var col = grid_size - 1
 			var row = start_row
 			while col >= 0 and row < grid_size:
@@ -449,7 +465,7 @@ func spawn_bishop_hazard() -> void:
 		_execute_hazard_with_piece(positions, bishop_texture, start_pos)
 
 func spawn_knight_hazard() -> void:
-	var start_pos = Vector2i(randi() % grid_size, randi() % grid_size)
+	var start_pos = Vector2i(rng.randi() % grid_size, rng.randi() % grid_size)
 	_execute_knight_hazard(start_pos)
 
 func _get_valid_knight_moves(from_pos: Vector2i) -> Array[Vector2i]:
@@ -517,7 +533,6 @@ func _start_danger_pulse(square: Node2D) -> void:
 	
 	square.set_meta("danger_tween", tween)
 
-
 # =====================
 # KNIGHT HAZARD
 # =====================
@@ -557,7 +572,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		if valid_moves.is_empty():
 			break
 		
-		var target_pos = valid_moves[randi() % valid_moves.size()]
+		var target_pos = valid_moves[rng.randi() % valid_moves.size()]
 		
 		_mark_danger(target_pos)
 		
@@ -627,7 +642,7 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 	for pos in positions:
 		_mark_danger(pos)
 	
-	# Wait for warning — NO collision check here, player can still escape
+	# Wait for warning
 	await get_tree().create_timer(hazard_warning_time).timeout
 	
 	if is_resetting or not is_instance_valid(piece):
@@ -638,7 +653,7 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		active_hazards -= 1
 		return
 	
-	# Animate piece through — collision checked per tile as piece arrives
+	# Animate piece through
 	await _animate_sliding_piece(piece, positions)
 	
 	if is_resetting or not is_instance_valid(piece):
@@ -668,12 +683,10 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 		var pos = positions[i]
 		var target_world = grid_to_world(pos)
 		
-		# Move piece to this square
 		if is_instance_valid(piece):
 			var move_tween = create_tween()
 			move_tween.tween_property(piece, "position", target_world, hazard_slide_speed).set_trans(Tween.TRANS_LINEAR)
 		
-		# Wait for piece to arrive
 		await get_tree().create_timer(hazard_slide_speed).timeout
 		
 		if is_resetting or not is_instance_valid(piece):
@@ -687,13 +700,13 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 			var flash_tween = create_tween()
 			flash_tween.tween_property(rect, "color", color_floor_danger, hazard_flash_duration)
 		
-		# Check collision AFTER piece has arrived at this square
+		# Check collision AFTER piece has arrived
 		if player and not player.is_dead:
 			if player.grid_pos == pos:
 				player_hit.emit()
 				player.die()
 	
-	# Exit animation — piece slides off the board
+	# Exit animation
 	if positions.size() >= 2 and is_instance_valid(piece):
 		var last_pos = grid_to_world(positions[-1])
 		var second_last_pos = grid_to_world(positions[-2])
@@ -708,7 +721,7 @@ func spawn_random_hazard() -> void:
 	if is_resetting:
 		return
 	
-	var hazard_type = randi() % 3
+	var hazard_type = rng.randi() % 3
 	
 	match hazard_type:
 		0:

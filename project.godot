@@ -18,6 +18,7 @@ config/icon="uid://b3i2fx6g74qne"
 [autoload]
 
 GameSettings="*res://scripts/game_settings.gd"
+NetworkManager="*res://scripts/network_manager.gd"
 
 [display]
 

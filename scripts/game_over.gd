@@ -26,8 +26,11 @@ func _ready() -> void:
 	hide_game_over()
 
 func _setup_ui() -> void:
+	# Root container — full screen
 	container = Control.new()
 	container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	container.anchor_right = 1.0
+	container.anchor_bottom = 1.0
 	add_child(container)
 	
 	# Dark overlay
@@ -36,14 +39,16 @@ func _setup_ui() -> void:
 	overlay.color = Color(0, 0, 0, 0.7)
 	container.add_child(overlay)
 	
-	# Center content
-	var center = VBoxContainer.new()
-	center.set_anchors_preset(Control.PRESET_CENTER)
-	center.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	center.grow_vertical = Control.GROW_DIRECTION_BOTH
-	center.position = Vector2(-150, -140)
-	center.custom_minimum_size = Vector2(300, 280)
-	container.add_child(center)
+	# CenterContainer fills parent, auto-centers its child
+	var center_wrapper = CenterContainer.new()
+	center_wrapper.set_anchors_preset(Control.PRESET_FULL_RECT)
+	container.add_child(center_wrapper)
+	
+	# Content VBox (centered by the CenterContainer)
+	var vbox = VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 0)
+	center_wrapper.add_child(vbox)
 	
 	# "GAME OVER"
 	game_over_label = Label.new()
@@ -51,9 +56,12 @@ func _setup_ui() -> void:
 	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game_over_label.add_theme_font_size_override("font_size", 64)
 	game_over_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-	center.add_child(game_over_label)
+	game_over_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
+	game_over_label.add_theme_constant_override("shadow_offset_x", 3)
+	game_over_label.add_theme_constant_override("shadow_offset_y", 3)
+	vbox.add_child(game_over_label)
 	
-	_add_spacer(center, 20)
+	_add_spacer(vbox, 24)
 	
 	# Score
 	score_label = Label.new()
@@ -61,19 +69,19 @@ func _setup_ui() -> void:
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_label.add_theme_font_size_override("font_size", 36)
 	score_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
-	center.add_child(score_label)
+	vbox.add_child(score_label)
 	
-	_add_spacer(center, 5)
+	_add_spacer(vbox, 6)
 	
-	# High score
+	# High score line
 	highscore_label = Label.new()
 	highscore_label.text = ""
 	highscore_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	highscore_label.add_theme_font_size_override("font_size", 20)
+	highscore_label.add_theme_font_size_override("font_size", 22)
 	highscore_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
-	center.add_child(highscore_label)
+	vbox.add_child(highscore_label)
 	
-	_add_spacer(center, 30)
+	_add_spacer(vbox, 40)
 	
 	# Restart instruction
 	restart_label = Label.new()
@@ -81,9 +89,9 @@ func _setup_ui() -> void:
 	restart_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	restart_label.add_theme_font_size_override("font_size", 24)
 	restart_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	center.add_child(restart_label)
+	vbox.add_child(restart_label)
 	
-	_add_spacer(center, 8)
+	_add_spacer(vbox, 10)
 	
 	# Menu instruction
 	menu_label = Label.new()
@@ -91,7 +99,7 @@ func _setup_ui() -> void:
 	menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_label.add_theme_font_size_override("font_size", 18)
 	menu_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	center.add_child(menu_label)
+	vbox.add_child(menu_label)
 	
 	_pulse_restart_label()
 
@@ -126,7 +134,7 @@ func show_game_over() -> void:
 	score_label.text = "Score: " + str(final_score)
 	
 	if final_score >= GameSettings.high_score and final_score > 0:
-		highscore_label.text = "NEW HIGH SCORE!"
+		highscore_label.text = "★ NEW HIGH SCORE! ★"
 	else:
 		highscore_label.text = "Best: " + str(GameSettings.high_score)
 	
