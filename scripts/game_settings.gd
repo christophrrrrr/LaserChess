@@ -3,10 +3,9 @@ extends Node
 # Piece color setting: true = player is white, false = player is black
 var player_is_white: bool = true
 
-# High score (for profile)
+# High score (backward compat — PlayerData is now source of truth)
 var high_score: int = 0
 
-# Save file path
 const SAVE_PATH = "user://settings.cfg"
 
 func _ready() -> void:
@@ -19,7 +18,6 @@ func get_player_king_texture() -> String:
 		return "res://assets/king1.png"
 
 func get_enemy_textures() -> Dictionary:
-	# Player white = enemies black, and vice versa
 	if player_is_white:
 		return {
 			"rook": "res://assets/rook1.png",
@@ -41,31 +39,6 @@ func update_high_score(score: int) -> void:
 	if score > high_score:
 		high_score = score
 		save_settings()
-
-func get_title() -> String:
-	# Chess-themed titles based on high score
-	if high_score >= 100:
-		return "Grandmaster"
-	elif high_score >= 75:
-		return "International Master"
-	elif high_score >= 50:
-		return "FIDE Master"
-	elif high_score >= 35:
-		return "Candidate Master"
-	elif high_score >= 25:
-		return "Expert"
-	elif high_score >= 15:
-		return "Class A"
-	elif high_score >= 10:
-		return "Class B"
-	elif high_score >= 5:
-		return "Class C"
-	else:
-		return "Beginner"
-
-func get_elo() -> int:
-	# Rough ELO estimate based on high score
-	return 800 + (high_score * 20)
 
 func save_settings() -> void:
 	var config = ConfigFile.new()

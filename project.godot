@@ -19,6 +19,7 @@ config/icon="uid://b3i2fx6g74qne"
 
 GameSettings="*res://scripts/game_settings.gd"
 NetworkManager="*res://scripts/network_manager.gd"
+PlayerData="*res://scripts/player_data.gd"
 
 [display]
 

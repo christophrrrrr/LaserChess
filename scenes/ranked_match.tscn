@@ -8,6 +8,8 @@
 
 [node name="RankedMatch" type="Node2D"]
 script = ExtResource("1_ovo0j")
+match_duration = null
+countdown_duration = null
 
 [node name="GameBoard" parent="." instance=ExtResource("1_wwxbh")]
 knight_warning_time = 1.0

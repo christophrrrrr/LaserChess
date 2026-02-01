@@ -3,27 +3,25 @@ extends Node
 ## WebSocket client for matchmaking lobby + score relay.
 
 # =============================================================
-# SERVER URL — change this to your Render URL!
-# Local testing:  "ws://localhost:8765"
-# Production:     "wss://your-app-name.onrender.com"
+# SERVER URL
 # =============================================================
 var server_url: String = "wss://laserchess-webserver.onrender.com"
 
 # === SIGNALS ===
-signal connected_to_server(my_name: String)
+signal connected_to_server()
 signal connection_failed()
 signal disconnected_from_server()
 signal lobby_updated(players: Array, total_online: int)
-signal match_started(seed_val: int, opponent_name: String)
+signal match_started(seed_val: int, opponent_name: String, opponent_elo: int, opponent_player_id: String)
 signal opponent_score_updated(best_score: int)
-signal opponent_disconnected()
+signal match_result_received(result: String, my_score: int, opp_score: int, elo_change: int, opp_name: String, opp_elo: int, opp_player_id: String)
+signal opponent_disconnected_sig(elo_change: int, my_score: int, opp_score: int, opp_name: String, opp_elo: int, opp_player_id: String)
 signal challenge_failed(msg: String)
 
 # === STATE ===
 var _socket: WebSocketPeer = null
 var _was_connected: bool = false
-var my_id: int = -1
-var my_name: String = ""
+var session_id: int = -1
 
 func _ready() -> void:
 	set_process(false)
@@ -31,17 +29,17 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _socket == null:
 		return
-	
+
 	_socket.poll()
 	var state = _socket.get_ready_state()
-	
+
 	if state == WebSocketPeer.STATE_OPEN:
 		if not _was_connected:
 			_was_connected = true
 		while _socket.get_available_packet_count() > 0:
 			var text = _socket.get_packet().get_string_from_utf8()
 			_handle_message(text)
-	
+
 	elif state == WebSocketPeer.STATE_CLOSED:
 		var was = _was_connected
 		_socket = null
@@ -73,12 +71,16 @@ func disconnect_from_server() -> void:
 	_was_connected = false
 	set_process(false)
 
-## Use is_online() instead of is_connected() to avoid clash with Godot built-in.
 func is_online() -> bool:
 	return _was_connected and _socket != null
 
 func join_lobby() -> void:
-	_send({"type": "join_lobby"})
+	_send({
+		"type": "join_lobby",
+		"player_id": PlayerData.player_id,
+		"name": PlayerData.player_name,
+		"elo": PlayerData.elo
+	})
 
 func leave_lobby() -> void:
 	_send({"type": "leave_lobby"})
@@ -93,7 +95,11 @@ func send_match_end(best_score: int) -> void:
 	_send({"type": "match_end", "best_score": best_score})
 
 func rejoin_lobby() -> void:
-	_send({"type": "rejoin_lobby"})
+	_send({
+		"type": "rejoin_lobby",
+		"name": PlayerData.player_name,
+		"elo": PlayerData.elo
+	})
 
 # =====================
 # INTERNAL
@@ -110,22 +116,41 @@ func _handle_message(text: String) -> void:
 	var data = json.data
 	if not data is Dictionary:
 		return
-	
+
 	var msg_type = data.get("type", "")
 	match msg_type:
 		"welcome":
-			my_id = data.get("id", -1)
-			my_name = data.get("name", "")
-			connected_to_server.emit(my_name)
+			session_id = data.get("session_id", -1)
+			connected_to_server.emit()
 		"lobby_list":
 			lobby_updated.emit(data.get("players", []), data.get("total_online", 0))
 		"match_start":
-			match_started.emit(data.get("seed", 0), data.get("opponent", "???"))
+			match_started.emit(
+				data.get("seed", 0),
+				data.get("opponent", "???"),
+				data.get("opponent_elo", 1000),
+				data.get("opponent_player_id", "")
+			)
 		"opponent_score":
 			opponent_score_updated.emit(data.get("best_score", 0))
 		"match_result":
-			pass  # Client determines result from local scores
+			match_result_received.emit(
+				data.get("result", "draw"),
+				data.get("my_score", 0),
+				data.get("opp_score", 0),
+				data.get("elo_change", 0),
+				data.get("opponent_name", "???"),
+				data.get("opponent_elo", 1000),
+				data.get("opponent_player_id", "")
+			)
 		"opponent_disconnected":
-			opponent_disconnected.emit()
+			opponent_disconnected_sig.emit(
+				data.get("elo_change", 0),
+				data.get("my_score", 0),
+				data.get("opp_score", 0),
+				data.get("opponent_name", "???"),
+				data.get("opponent_elo", 1000),
+				data.get("opponent_player_id", "")
+			)
 		"challenge_failed":
 			challenge_failed.emit(data.get("msg", "Player unavailable"))
