@@ -6,6 +6,10 @@ var player_is_white: bool = true
 # High score (backward compat — PlayerData is now source of truth)
 var high_score: int = 0
 
+# === VOLUME (0.0 – 1.0, linear) ===
+var sfx_volume: float = 1.0
+var master_volume: float = 1.0
+
 const SAVE_PATH = "user://settings.cfg"
 
 func _ready() -> void:
@@ -40,10 +44,26 @@ func update_high_score(score: int) -> void:
 		high_score = score
 		save_settings()
 
+# === VOLUME API ===
+
+func set_sfx_volume(v: float) -> void:
+	sfx_volume = clampf(v, 0.0, 1.0)
+	SoundManager.sfx_volume = sfx_volume
+	save_settings()
+
+func set_master_volume(v: float) -> void:
+	master_volume = clampf(v, 0.0, 1.0)
+	SoundManager.master_volume = master_volume
+	save_settings()
+
+# === SAVE / LOAD ===
+
 func save_settings() -> void:
 	var config = ConfigFile.new()
 	config.set_value("settings", "player_is_white", player_is_white)
 	config.set_value("stats", "high_score", high_score)
+	config.set_value("audio", "sfx_volume", sfx_volume)
+	config.set_value("audio", "master_volume", master_volume)
 	config.save(SAVE_PATH)
 
 func load_settings() -> void:
@@ -52,3 +72,12 @@ func load_settings() -> void:
 	if err == OK:
 		player_is_white = config.get_value("settings", "player_is_white", true)
 		high_score = config.get_value("stats", "high_score", 0)
+		sfx_volume = config.get_value("audio", "sfx_volume", 1.0)
+		master_volume = config.get_value("audio", "master_volume", 1.0)
+
+	# Push saved volumes to SoundManager (it's loaded before us as autoload)
+	_apply_volume.call_deferred()
+
+func _apply_volume() -> void:
+	SoundManager.sfx_volume = sfx_volume
+	SoundManager.master_volume = master_volume

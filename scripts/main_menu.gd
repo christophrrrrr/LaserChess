@@ -18,6 +18,10 @@ var shop_panel: Control
 # === SETTINGS ===
 var color_toggle_button: Button
 var color_label: Label
+var sfx_slider: HSlider
+var sfx_value_label: Label
+var master_slider: HSlider
+var master_value_label: Label
 
 # === PROFILE ===
 var profile_name_label: Label
@@ -159,17 +163,26 @@ func _setup_main_menu() -> void:
 	_add_spacer(center, 30)
 
 	play_button = _create_menu_button("PLAY", Color(0.0, 0.8, 0.4))
-	play_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/main.tscn"))
+	play_button.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/main.tscn")
+	)
 	center.add_child(play_button)
 	_add_spacer(center, 12)
 
 	ranked_button = _create_menu_button("RANKED", Color(0.85, 0.55, 0.1))
-	ranked_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/ranked_match.tscn"))
+	ranked_button.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/ranked_match.tscn")
+	)
 	center.add_child(ranked_button)
 	_add_spacer(center, 12)
 
 	leaderboard_button = _create_menu_button("LEADERBOARD", Color(0.8, 0.65, 0.1))
-	leaderboard_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/leaderboard.tscn"))
+	leaderboard_button.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/leaderboard.tscn")
+	)
 	center.add_child(leaderboard_button)
 	_add_spacer(center, 12)
 
@@ -179,7 +192,10 @@ func _setup_main_menu() -> void:
 	_add_spacer(center, 12)
 
 	settings_button = _create_menu_button("SETTINGS", Color(0.3, 0.5, 0.8))
-	settings_button.pressed.connect(func(): settings_panel.visible = true)
+	settings_button.pressed.connect(func():
+		SoundManager.play("click")
+		settings_panel.visible = true
+	)
 	center.add_child(settings_button)
 	_add_spacer(center, 12)
 
@@ -188,17 +204,18 @@ func _setup_main_menu() -> void:
 	center.add_child(profile_button)
 
 # =====================
-# SETTINGS PANEL
+# SETTINGS PANEL (with volume sliders)
 # =====================
 
 func _setup_settings_panel() -> void:
 	var oc = _create_overlay()
-	var panel = _create_panel_box(oc, Vector2(420, 320), Color(0.3, 0.5, 0.8, 0.8))
+	var panel = _create_panel_box(oc, Vector2(440, 440), Color(0.3, 0.5, 0.8, 0.8))
 	var vbox = _get_panel_vbox(panel)
 
 	_add_panel_title(vbox, "SETTINGS", Color(0.3, 0.5, 0.8))
-	_add_spacer(vbox, 30)
+	_add_spacer(vbox, 24)
 
+	# --- Piece Color ---
 	var color_row = HBoxContainer.new()
 	color_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	color_row.add_theme_constant_override("separation", 8)
@@ -216,24 +233,116 @@ func _setup_settings_panel() -> void:
 	color_row.add_child(color_label)
 	_update_color_label()
 
-	_add_spacer(vbox, 20)
+	_add_spacer(vbox, 12)
 
 	color_toggle_button = _create_panel_button("SWITCH COLORS", Color(0.35, 0.45, 0.65))
 	color_toggle_button.pressed.connect(func():
+		SoundManager.play("click")
 		GameSettings.toggle_colors()
 		_update_color_label()
 	)
 	vbox.add_child(color_toggle_button)
 
-	_add_spacer(vbox, 30)
+	_add_spacer(vbox, 24)
 	_add_separator(vbox)
-	_add_spacer(vbox, 20)
+	_add_spacer(vbox, 18)
+
+	# --- SFX Volume ---
+	var sfx_row = _create_volume_row("SFX Volume")
+	vbox.add_child(sfx_row["container"])
+	sfx_slider = sfx_row["slider"]
+	sfx_value_label = sfx_row["value_label"]
+	sfx_slider.value = GameSettings.sfx_volume * 100.0
+	sfx_value_label.text = str(int(sfx_slider.value)) + "%"
+	sfx_slider.value_changed.connect(func(val: float):
+		GameSettings.set_sfx_volume(val / 100.0)
+		sfx_value_label.text = str(int(val)) + "%"
+	)
+
+	_add_spacer(vbox, 10)
+
+	# --- Master Volume ---
+	var master_row = _create_volume_row("Master Volume")
+	vbox.add_child(master_row["container"])
+	master_slider = master_row["slider"]
+	master_value_label = master_row["value_label"]
+	master_slider.value = GameSettings.master_volume * 100.0
+	master_value_label.text = str(int(master_slider.value)) + "%"
+	master_slider.value_changed.connect(func(val: float):
+		GameSettings.set_master_volume(val / 100.0)
+		master_value_label.text = str(int(val)) + "%"
+	)
+
+	_add_spacer(vbox, 24)
+	_add_separator(vbox)
+	_add_spacer(vbox, 16)
 
 	var back = _create_panel_button("BACK", Color(0.3, 0.3, 0.4))
-	back.pressed.connect(func(): settings_panel.visible = false)
+	back.pressed.connect(func():
+		SoundManager.play("click")
+		settings_panel.visible = false
+	)
 	vbox.add_child(back)
 
 	settings_panel = oc
+
+func _create_volume_row(label_text: String) -> Dictionary:
+	"""Helper: creates a labeled slider row. Returns { container, slider, value_label }."""
+	var row = VBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+
+	var header = HBoxContainer.new()
+	header.alignment = BoxContainer.ALIGNMENT_CENTER
+	header.add_theme_constant_override("separation", 8)
+	row.add_child(header)
+
+	var lbl = Label.new()
+	lbl.text = label_text
+	lbl.add_theme_font_size_override("font_size", 18)
+	lbl.add_theme_color_override("font_color", Color(0.8, 0.8, 0.9))
+	header.add_child(lbl)
+
+	var val_lbl = Label.new()
+	val_lbl.text = "100%"
+	val_lbl.add_theme_font_size_override("font_size", 18)
+	val_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+	val_lbl.custom_minimum_size = Vector2(55, 0)
+	val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	header.add_child(val_lbl)
+
+	var slider = HSlider.new()
+	slider.min_value = 0
+	slider.max_value = 100
+	slider.step = 1
+	slider.custom_minimum_size = Vector2(260, 24)
+	slider.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+	# Style the slider track
+	var track_style = StyleBoxFlat.new()
+	track_style.bg_color = Color(0.2, 0.2, 0.3)
+	track_style.set_corner_radius_all(4)
+	track_style.content_margin_top = 4
+	track_style.content_margin_bottom = 4
+	slider.add_theme_stylebox_override("slider", track_style)
+
+	# Grabber stylebox (the filled part)
+	var grabber_area = StyleBoxFlat.new()
+	grabber_area.bg_color = Color(0.3, 0.5, 0.8)
+	grabber_area.set_corner_radius_all(4)
+	grabber_area.content_margin_top = 4
+	grabber_area.content_margin_bottom = 4
+	slider.add_theme_stylebox_override("grabber_area", grabber_area)
+
+	var grabber_highlight = StyleBoxFlat.new()
+	grabber_highlight.bg_color = Color(0.4, 0.6, 0.9)
+	grabber_highlight.set_corner_radius_all(4)
+	grabber_highlight.content_margin_top = 4
+	grabber_highlight.content_margin_bottom = 4
+	slider.add_theme_stylebox_override("grabber_area_highlight", grabber_highlight)
+
+	row.add_child(slider)
+
+	return {"container": row, "slider": slider, "value_label": val_lbl}
 
 # =====================
 # PROFILE PANEL
@@ -333,6 +442,7 @@ func _setup_shop_panel() -> void:
 
 	var unequip = _create_panel_button("REMOVE HAT", Color(0.4, 0.25, 0.25))
 	unequip.pressed.connect(func():
+		SoundManager.play("click")
 		PlayerData.equip_hat("")
 		_refresh_shop()
 	)
@@ -431,11 +541,15 @@ func _refresh_shop() -> void:
 
 func _buy_hat(hat_id: String) -> void:
 	if PlayerData.purchase_hat(hat_id):
+		SoundManager.play("purchase")
 		PlayerData.equip_hat(hat_id)
 		_refresh_shop()
 		_update_points_display()
+	else:
+		SoundManager.play("error")
 
 func _equip_hat(hat_id: String) -> void:
+	SoundManager.play("equip")
 	PlayerData.equip_hat(hat_id)
 	_refresh_shop()
 
@@ -600,6 +714,7 @@ func _update_points_display() -> void:
 # =====================
 
 func _on_name_edit_pressed() -> void:
+	SoundManager.play("click")
 	if profile_name_edit.visible:
 		_save_name()
 	else:
@@ -624,19 +739,23 @@ func _save_name() -> void:
 # =====================
 
 func _on_profile_pressed() -> void:
+	SoundManager.play("click")
 	_update_profile_display()
 	profile_panel.visible = true
 
 func _on_profile_back_pressed() -> void:
+	SoundManager.play("click")
 	if profile_name_edit.visible:
 		_save_name()
 	profile_panel.visible = false
 
 func _on_shop_pressed() -> void:
+	SoundManager.play("click")
 	_refresh_shop()
 	shop_panel.visible = true
 
 func _on_shop_back_pressed() -> void:
+	SoundManager.play("click")
 	shop_panel.visible = false
 	_update_points_display()
 
@@ -646,6 +765,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if shop_panel.visible:
 				_on_shop_back_pressed()
 			elif settings_panel.visible:
+				SoundManager.play("click")
 				settings_panel.visible = false
 			elif profile_panel.visible:
 				_on_profile_back_pressed()

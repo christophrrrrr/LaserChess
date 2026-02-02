@@ -455,6 +455,7 @@ func _clear_profile_popup() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
+			SoundManager.play("click")
 			if profile_popup.visible:
 				profile_popup.visible = false
 			else:

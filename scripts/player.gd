@@ -24,6 +24,11 @@ var hat_node: Node2D = null
 # Track keys pressed this frame for clean "just pressed" on raw keycodes
 var _keys_this_frame: Array = []
 
+# === HOLD-KEY MOVEMENT ===
+var _move_cooldown: float = 0.0
+const MOVE_INITIAL_DELAY := 0.16   ## Delay before repeat starts (seconds)
+const MOVE_REPEAT_RATE := 0.09     ## Time between repeated moves when held
+
 func _ready() -> void:
 	game_board = get_parent().get_node("GameBoard")
 	grid_size = game_board.grid_size
@@ -142,27 +147,52 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_keys_this_frame.append(event.keycode)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if is_moving or is_dead:
 		_keys_this_frame.clear()
 		return
 
-	var move_left = Input.is_action_just_pressed("move_left") or KEY_A in _keys_this_frame
-	var move_right = Input.is_action_just_pressed("move_right") or KEY_D in _keys_this_frame
-	var move_up = Input.is_action_just_pressed("move_up") or KEY_W in _keys_this_frame
-	var move_down = Input.is_action_just_pressed("move_down") or KEY_S in _keys_this_frame
+	_move_cooldown -= delta
+
+	# --- Detect "just pressed" (first frame) ---
+	var just_left  = Input.is_action_just_pressed("move_left")  or KEY_A in _keys_this_frame
+	var just_right = Input.is_action_just_pressed("move_right") or KEY_D in _keys_this_frame
+	var just_up    = Input.is_action_just_pressed("move_up")    or KEY_W in _keys_this_frame
+	var just_down  = Input.is_action_just_pressed("move_down")  or KEY_S in _keys_this_frame
+
+	# --- Detect "held" (continuous) ---
+	var held_left  = Input.is_action_pressed("move_left")  or Input.is_key_pressed(KEY_A)
+	var held_right = Input.is_action_pressed("move_right") or Input.is_key_pressed(KEY_D)
+	var held_up    = Input.is_action_pressed("move_up")    or Input.is_key_pressed(KEY_W)
+	var held_down  = Input.is_action_pressed("move_down")  or Input.is_key_pressed(KEY_S)
+
 	var press = Input.is_action_just_pressed("press_button") or KEY_E in _keys_this_frame or KEY_SPACE in _keys_this_frame
 
 	_keys_this_frame.clear()
 
-	if move_left:
-		_try_move(Vector2i.LEFT)
-	elif move_right:
-		_try_move(Vector2i.RIGHT)
-	elif move_up:
-		_try_move(Vector2i.UP)
-	elif move_down:
-		_try_move(Vector2i.DOWN)
+	# --- Movement priority: just-pressed first, then held (with cooldown) ---
+	if just_left:
+		_try_move(Vector2i.LEFT);  _move_cooldown = MOVE_INITIAL_DELAY
+	elif just_right:
+		_try_move(Vector2i.RIGHT); _move_cooldown = MOVE_INITIAL_DELAY
+	elif just_up:
+		_try_move(Vector2i.UP);    _move_cooldown = MOVE_INITIAL_DELAY
+	elif just_down:
+		_try_move(Vector2i.DOWN);  _move_cooldown = MOVE_INITIAL_DELAY
+	elif _move_cooldown <= 0.0:
+		# Held-key repeat (only fires after initial delay expires)
+		if held_left:
+			_try_move(Vector2i.LEFT);  _move_cooldown = MOVE_REPEAT_RATE
+		elif held_right:
+			_try_move(Vector2i.RIGHT); _move_cooldown = MOVE_REPEAT_RATE
+		elif held_up:
+			_try_move(Vector2i.UP);    _move_cooldown = MOVE_REPEAT_RATE
+		elif held_down:
+			_try_move(Vector2i.DOWN);  _move_cooldown = MOVE_REPEAT_RATE
+
+	# Reset cooldown when no direction is held at all
+	if not (held_left or held_right or held_up or held_down):
+		_move_cooldown = 0.0
 
 	if press:
 		_try_press()
@@ -178,12 +208,15 @@ func _try_move(direction: Vector2i) -> void:
 		var hit = game_board.try_wall_press(grid_pos, direction)
 		if hit:
 			_do_wall_hit_animation(direction)
+			SoundManager.play("wall_hit")
 		else:
 			_do_bump_animation(direction)
+			SoundManager.play("bump")
 		return
 
 	grid_pos = new_pos
 	_do_move_animation()
+	SoundManager.play_pitched("move", 0.9, 1.1)
 
 func _do_move_animation() -> void:
 	is_moving = true
@@ -232,8 +265,10 @@ func _try_press() -> void:
 	var hit = game_board.try_floor_press(grid_pos)
 	if hit:
 		_do_press_hit_animation()
+		SoundManager.play("hit")
 	else:
 		_do_press_miss_animation()
+		SoundManager.play("miss")
 
 func _do_press_hit_animation() -> void:
 	var tween = create_tween()
@@ -256,6 +291,7 @@ func die() -> void:
 	if is_dead:
 		return
 	is_dead = true
+	SoundManager.play("death")
 
 	var tween = create_tween()
 	tween.set_parallel(true)
@@ -273,6 +309,7 @@ func reset() -> void:
 	is_moving = false
 	is_dead = false
 	_keys_this_frame.clear()
+	_move_cooldown = 0.0
 
 	sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	glow.modulate = Color(1.0, 0.8, 0.0, 0.5)

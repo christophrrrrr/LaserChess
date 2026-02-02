@@ -735,6 +735,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.keycode == KEY_ESCAPE:
+		SoundManager.play("click")
 		NetworkManager.disconnect_from_server()
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 		return

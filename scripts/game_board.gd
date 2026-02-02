@@ -575,6 +575,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		var target_pos = valid_moves[rng.randi() % valid_moves.size()]
 		
 		_mark_danger(target_pos)
+		SoundManager.play("warning")
 		
 		await get_tree().create_timer(knight_warning_time).timeout
 		
@@ -641,6 +642,7 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 	# Mark all positions as danger (warning phase)
 	for pos in positions:
 		_mark_danger(pos)
+	SoundManager.play("warning")
 	
 	# Wait for warning
 	await get_tree().create_timer(hazard_warning_time).timeout
@@ -654,6 +656,7 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		return
 	
 	# Animate piece through
+	SoundManager.play("hazard_slide")
 	await _animate_sliding_piece(piece, positions)
 	
 	if is_resetting or not is_instance_valid(piece):

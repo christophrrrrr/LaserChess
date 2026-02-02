@@ -11,8 +11,9 @@ config_version=5
 [application]
 
 config/name="LaserChess"
-run/main_scene="uid://dsk0wxrjrfby"
+run/main_scene="uid://b485sk4jq8mcm"
 config/features=PackedStringArray("4.5", "Forward Plus")
+boot_splash/image="uid://b3i2fx6g74qne"
 config/icon="uid://b3i2fx6g74qne"
 
 [autoload]
@@ -20,6 +21,7 @@ config/icon="uid://b3i2fx6g74qne"
 GameSettings="*res://scripts/game_settings.gd"
 NetworkManager="*res://scripts/network_manager.gd"
 PlayerData="*res://scripts/player_data.gd"
+SoundManager="*res://scripts/sound_manager.gd"
 
 [display]
 
