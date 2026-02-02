@@ -414,7 +414,7 @@ func _show_profile(data: Dictionary) -> void:
 	_add_spacer(vbox, 16)
 
 	var close_hint = Label.new()
-	close_hint.text = "Click anywhere to close"
+	close_hint.text = "Click esc to close"
 	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	close_hint.add_theme_font_size_override("font_size", 13)
 	close_hint.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))

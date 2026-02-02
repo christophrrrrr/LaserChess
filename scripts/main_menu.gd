@@ -326,7 +326,7 @@ func _setup_shop_panel() -> void:
 
 	shop_content = VBoxContainer.new()
 	shop_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_content.add_theme_constant_override("separation", 8)
+	shop_content.add_theme_constant_override("separation", 4)
 	scroll.add_child(shop_content)
 
 	_add_spacer(vbox, 12)
@@ -353,7 +353,12 @@ func _refresh_shop() -> void:
 
 	shop_points_label.text = "Your Points: " + str(PlayerData.total_points)
 
-	for hat_id in PlayerData.SHOP_HATS:
+	var hat_ids := PlayerData.SHOP_HATS.keys()
+	hat_ids.sort_custom(func(a, b):
+		return int(PlayerData.SHOP_HATS[a]["cost"]) < int(PlayerData.SHOP_HATS[b]["cost"])
+	)
+
+	for hat_id in hat_ids:
 		var hat = PlayerData.SHOP_HATS[hat_id]
 		var owned = hat_id in PlayerData.purchased_hats
 		var equipped = hat_id == PlayerData.equipped_hat
@@ -367,33 +372,41 @@ func _refresh_shop() -> void:
 		s.set_corner_radius_all(8)
 		s.border_color = bdr
 		s.set_border_width_all(1)
-		s.set_content_margin_all(10)
+		s.set_content_margin_all(6)
 		item.add_theme_stylebox_override("panel", s)
 
 		var hbox = HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 12)
+		hbox.add_theme_constant_override("separation", 8)
 		item.add_child(hbox)
+
+		# --- Hat icon ---
+		var icon = TextureRect.new()
+		icon.custom_minimum_size = Vector2(56, 56)
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture = load(hat.get("tex", ""))
+		hbox.add_child(icon)
 
 		var info = VBoxContainer.new()
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		info.add_theme_constant_override("separation", 2)
 		hbox.add_child(info)
 
+
 		var n = Label.new()
 		n.text = hat["name"]
-		n.add_theme_font_size_override("font_size", 18)
+		n.add_theme_font_size_override("font_size", 15)
 		n.add_theme_color_override("font_color", Color.WHITE if owned else Color(0.8, 0.8, 0.9))
 		info.add_child(n)
 
 		var d = Label.new()
 		d.text = hat["desc"]
-		d.add_theme_font_size_override("font_size", 13)
+		d.add_theme_font_size_override("font_size", 11)
 		d.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
 		info.add_child(d)
 
 		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(100, 36)
-		btn.add_theme_font_size_override("font_size", 14)
+		btn.custom_minimum_size = Vector2(90, 30)
+		btn.add_theme_font_size_override("font_size", 12)
 		btn.add_theme_color_override("font_color", Color.WHITE)
 
 		if equipped:

@@ -33,14 +33,101 @@ var draws: int = 0
 var _save_path: String = "user://player.json"
 
 # === SHOP ITEMS ===
-const SHOP_HATS: Dictionary = {
-	"party_hat":  {"name": "Party Hat",    "cost": 15,  "desc": "Festive & fun!"},
-	"crown":      {"name": "Golden Crown", "cost": 50,  "desc": "Royalty awaits"},
-	"devil_horns":{"name": "Devil Horns",  "cost": 75,  "desc": "Devilish flair"},
-	"top_hat":    {"name": "Top Hat",      "cost": 100, "desc": "Dapper & refined"},
-	"wizard_hat": {"name": "Wizard Hat",   "cost": 150, "desc": "Arcane power"},
-	"halo":       {"name": "Halo",         "cost": 200, "desc": "Angelic grace"},
+# === SHOP ITEMS (auto from res://assets/hats) ===
+var SHOP_HATS: Dictionary = {}
+const DEFAULT_HAT_COST := 50
+
+const HAT_PRICES := {
+	# === COMMON / JOKE (10–30) ===
+	"hotdog": 10,
+	"pinwheel": 15,
+	"birthday": 20,
+	"umbrella": 20,
+	"sunhat": 25,
+	"beanie": 30,
+	"beret": 30,
+
+	# === UNCOMMON (40–75) ===
+	"baseballCap": 40,
+	"bowlerHat": 45,
+	"outback": 45,
+	"redBonnet": 50,
+	"50sMilitary": 50,
+	"50sNurse": 50,
+	"police": 60,
+	"hardHat": 60,
+	"fireman": 60,
+	"lumberjack": 70,
+	"cowboy": 75,
+
+	# === RARE (90–150) ===
+	"bicorn": 90,
+	"classicFedora": 100,
+	"tophat": 110,
+	"fez": 120,
+	"leprechaun": 130,
+	"captains": 140,
+	"graduation": 150,
+
+	# === EPIC (180–300) ===
+	"princess": 180,
+	"wig": 200,
+	"catEars": 220,
+	"bunny": 240,
+	"antlers": 260,
+	"viking": 280,
+	"spartann": 300,
+
+	# === LEGENDARY (350–600) ===
+	"shark": 350,
+	"skeleton": 400,
+	"horseHead": 500,
+	"freakazoid": 600,
+
+	# === MYTHIC / SPECIAL (800–1000) ===
+	"crown": 1000,
+	"ww1German": 800
 }
+
+const HATS_DIR := "res://assets/HatPack/"
+
+# Per-hat sprite tweaks (only add entries for hats that need fixing)
+# pos = extra offset applied to the hat sprite
+# scale = multiplier (1.0 = normal, 0.8 = smaller, 1.2 = bigger)
+# rot_deg = rotation in degrees
+const HAT_TWEAKS := {
+	# examples (edit these):
+	# "horseHead": {"pos": Vector2(0, 8), "scale": 0.75, "rot_deg": 0},
+	# "bicorn": {"pos": Vector2(0, 2), "scale": 0.9, "rot_deg": -5},
+	"pinwheel": {"pos": Vector2(0,0), "scale": 1, "rot_deg": 20},
+	"hotdog": {"pos": Vector2(0,0), "scale": 1, "rot_deg": 10},
+	"umbrella": {"pos": Vector2(0,0), "scale": 1, "rot_deg": 20},
+	"birthday": {"pos": Vector2(0,5), "scale": 1, "rot_deg": 20},
+	"sunhat": {"pos": Vector2(0,5), "scale": 1, "rot_deg": 0},
+	"beanie": {"pos": Vector2(-3,5), "scale": 1, "rot_deg": 45},
+	"beret": {"pos": Vector2(0,0), "scale": 0.8, "rot_deg": 20},
+	"baseballCap": {"pos": Vector2(5,5), "scale": 1, "rot_deg": 0},
+	"takuhatsugasa": {"pos": Vector2(0,3), "scale": 1, "rot_deg": 0},
+	"spartan": {"pos": Vector2(0,6), "scale": 1, "rot_deg": 0},
+	"robinhood": {"pos": Vector2(0,1), "scale": 1.1, "rot_deg": 0},
+	"redBonnet": {"pos": Vector2(0,5), "scale": 0.9, "rot_deg": 0},
+	"waldo": {"pos": Vector2(-7,5), "scale": 1, "rot_deg": 20},
+	"50sMilitary": {"pos": Vector2(0,2), "scale": 1, "rot_deg": 0},
+	"50sNurse": {"pos": Vector2(-2,2), "scale": 1, "rot_deg": 0},
+	"beanieWithTassels": {"pos": Vector2(-8,12), "scale": 1.2, "rot_deg": 10},
+	"lumberjack": {"pos": Vector2(-2,10), "scale": 1.5, "rot_deg": 0},
+	"bicorn": {"pos": Vector2(-3,5), "scale": 1.2, "rot_deg": 0},
+	"fez": {"pos": Vector2(-3,5), "scale": 0.9, "rot_deg": 0},
+	"leprechaun": {"pos": Vector2(-3,5), "scale": 1.1, "rot_deg": 0},
+	"graduation": {"pos": Vector2(-3,5), "scale": 1.1, "rot_deg": 0},
+	"princess": {"pos": Vector2(-7,2), "scale": 1.1, "rot_deg": 0},
+	"shark": {"pos": Vector2(-11,5), "scale": 1.5, "rot_deg": 0},
+	"horseHead": {"pos": Vector2(5,5), "scale": 1.5, "rot_deg": 0},
+	"freakazoid": {"pos": Vector2(-11,5), "scale": 1.5, "rot_deg": 0},
+	"crown": {"pos": Vector2(-3,5), "scale": 1.4, "rot_deg": 0},
+	
+}
+
 
 # === NAME GENERATOR ===
 const _ADJ = [
@@ -54,6 +141,7 @@ const _PIECE = ["Pawn","Rook","Bishop","Knight","King","Queen","Castle"]
 # =====================
 
 func _ready() -> void:
+	_build_shop_hats()
 	_load_local()
 	if player_id.is_empty():
 		_create_new_player()
@@ -378,3 +466,27 @@ func _generate_uuid() -> String:
 
 func _random_name() -> String:
 	return _ADJ[randi() % _ADJ.size()] + _PIECE[randi() % _PIECE.size()]
+
+func _build_shop_hats() -> void:
+	SHOP_HATS.clear()
+
+	var dir := DirAccess.open(HATS_DIR)
+	if dir == null:
+		push_warning("Hats folder not found: " + HATS_DIR)
+		return
+
+	dir.list_dir_begin()
+	var file := dir.get_next()
+	while file != "":
+		if !dir.current_is_dir() and file.to_lower().ends_with(".png"):
+			var id := file.get_basename() # filename without extension
+			var display_name := id.replace("_", " ").capitalize()
+
+			SHOP_HATS[id] = {
+				"name": display_name,
+				"cost": HAT_PRICES.get(id, DEFAULT_HAT_COST),
+				"desc": "Cosmetic hat",
+				"tex": HATS_DIR + "/" + file
+			}
+		file = dir.get_next()
+	dir.list_dir_end()

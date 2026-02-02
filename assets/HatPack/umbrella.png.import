@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bm7ovxemqqb4o"
-path="res://.godot/imported/example_board.png-407ee3a2540ddf5fce1032ea262550a7.ctex"
+uid="uid://c36txynbd251q"
+path="res://.godot/imported/umbrella.png-80f933c40c0a4d854d0f38ec2aac3887.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://chess_pieces_16x16_onebit/example_board.png"
-dest_files=["res://.godot/imported/example_board.png-407ee3a2540ddf5fce1032ea262550a7.ctex"]
+source_file="res://assets/HatPack/umbrella.png"
+dest_files=["res://.godot/imported/umbrella.png-80f933c40c0a4d854d0f38ec2aac3887.ctex"]
 
 [params]
 
