@@ -157,7 +157,7 @@ func _build_left_column() -> VBoxContainer:
 	var lb_title = Label.new()
 	lb_title.text = "LEADERBOARD"
 	lb_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lb_title.add_theme_font_size_override("font_size", 15)
+	lb_title.add_theme_font_size_override("font_size", 30)
 	lb_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	lb_vbox.add_child(lb_title)
 
@@ -177,7 +177,7 @@ func _build_left_column() -> VBoxContainer:
 	var loading_lbl = Label.new()
 	loading_lbl.text = "Loading..."
 	loading_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	loading_lbl.add_theme_font_size_override("font_size", 12)
+	loading_lbl.add_theme_font_size_override("font_size", 20)
 	loading_lbl.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
 	lb_content.add_child(loading_lbl)
 
@@ -217,7 +217,7 @@ func _build_center_column() -> VBoxContainer:
 	var title = Label.new()
 	title.text = "LASER CHESS"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 56)
+	title.add_theme_font_size_override("font_size", 75)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.6))
 	title.add_theme_constant_override("shadow_offset_x", 3)
