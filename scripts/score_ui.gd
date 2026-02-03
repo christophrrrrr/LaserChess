@@ -15,9 +15,9 @@ func _setup_ui() -> void:
 	
 	# Use anchors so it stays top-left regardless of window size
 	score_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	score_label.position = Vector2(20, 20)
+	score_label.position = Vector2(40, 40)
 	
-	score_label.add_theme_font_size_override("font_size", 48)
+	score_label.add_theme_font_size_override("font_size", 96)
 	score_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
 	score_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
 	score_label.add_theme_constant_override("shadow_offset_x", 2)

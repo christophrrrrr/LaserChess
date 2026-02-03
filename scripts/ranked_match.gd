@@ -81,6 +81,14 @@ func _connect_signals() -> void:
 # =====================
 
 func _on_connected() -> void:
+	# Debug: check what data will be sent
+	print("[DEBUG RANKED] Connected! PlayerData.player_name='", PlayerData.player_name, "' elo=", PlayerData.elo)
+	
+	# Ensure player has valid data before joining
+	if PlayerData.player_name.is_empty():
+		print("[DEBUG RANKED] WARNING: player_name is empty! Using fallback")
+		PlayerData.player_name = "Player" + str(randi() % 1000)
+	
 	NetworkManager.join_lobby()
 
 func _on_connection_failed() -> void:
@@ -97,6 +105,9 @@ func _on_disconnected() -> void:
 		_show_error("Disconnected from server.")
 
 func _on_lobby_updated(players_list: Array, total_online: int) -> void:
+	print("[DEBUG LOBBY] Lobby updated with ", players_list.size(), " players, total_online=", total_online)
+	for p in players_list:
+		print("[DEBUG LOBBY]   Player: id=", p.get("id", -1), " name='", p.get("name", "???"), "' elo=", p.get("elo", 1000))
 	if current_state == State.CONNECTING or current_state == State.LOBBY:
 		_show_lobby(players_list, total_online)
 

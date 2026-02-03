@@ -157,7 +157,7 @@ func _setup_pause_menu() -> void:
 
 	# Panel
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(320, 280)
+	panel.custom_minimum_size = Vector2(640, 560)
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.06, 0.12)
 	panel_style.set_corner_radius_all(14)
@@ -176,14 +176,14 @@ func _setup_pause_menu() -> void:
 	var title = Label.new()
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_font_size_override("font_size", 84)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.5))
 	title.add_theme_constant_override("shadow_offset_x", 2)
 	title.add_theme_constant_override("shadow_offset_y", 2)
 	vbox.add_child(title)
 
-	_add_spacer(vbox, 30)
+	_add_spacer(vbox, 40)
 
 	# Continue button
 	var continue_btn = _create_pause_button("CONTINUE", Color(0.0, 0.65, 0.35))
@@ -203,16 +203,16 @@ func _setup_pause_menu() -> void:
 	var hint = Label.new()
 	hint.text = "ESC or SPACE to continue"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.add_theme_font_size_override("font_size", 14)
+	hint.add_theme_font_size_override("font_size", 28)
 	hint.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 	vbox.add_child(hint)
 
 func _create_pause_button(text: String, color: Color) -> Button:
 	var btn = Button.new()
 	btn.text = text
-	btn.custom_minimum_size = Vector2(220, 48)
+	btn.custom_minimum_size = Vector2(440, 96)
 	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_size_override("font_size", 22)
+	btn.add_theme_font_size_override("font_size", 44)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 
 	for state in ["normal", "hover", "pressed"]:

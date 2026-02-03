@@ -3,9 +3,9 @@ extends Node2D
 # === BOARD LAYOUT ===
 @export_group("Board Layout")
 @export var grid_size: int = 6
-@export var tile_size: float = 80.0
-@export var wall_thickness: float = 30.0
-@export var tile_gap: float = 4.0
+@export var tile_size: float = 120.0
+@export var wall_thickness: float = 45.0
+@export var tile_gap: float = 6.0
 
 # === HAZARD TIMING ===
 @export_group("Rook & Bishop")

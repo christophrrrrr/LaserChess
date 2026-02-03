@@ -75,6 +75,7 @@ func is_online() -> bool:
 	return _was_connected and _socket != null
 
 func join_lobby() -> void:
+	print("[DEBUG LOBBY] join_lobby called with name='", PlayerData.player_name, "' elo=", PlayerData.elo, " player_id='", PlayerData.player_id, "'")
 	_send({
 		"type": "join_lobby",
 		"player_id": PlayerData.player_id,
@@ -95,8 +96,20 @@ func send_match_end(best_score: int) -> void:
 	_send({"type": "match_end", "best_score": best_score})
 
 func rejoin_lobby() -> void:
+	print("[DEBUG LOBBY] rejoin_lobby called with name='", PlayerData.player_name, "' elo=", PlayerData.elo)
 	_send({
 		"type": "rejoin_lobby",
+		"name": PlayerData.player_name,
+		"elo": PlayerData.elo
+	})
+
+## Send updated player info to server (call after name/elo changes)
+func update_player_info() -> void:
+	if not is_online():
+		return
+	print("[DEBUG LOBBY] update_player_info called with name='", PlayerData.player_name, "' elo=", PlayerData.elo)
+	_send({
+		"type": "update_info",
 		"name": PlayerData.player_name,
 		"elo": PlayerData.elo
 	})
