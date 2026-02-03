@@ -119,20 +119,35 @@ func _on_opponent_score(best_score: int) -> void:
 
 func _on_match_result(result: String, my_score: int, opp_score: int,
 		elo_change: int, opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
-	last_elo_change = elo_change
+	print("[DEBUG ELO] _on_match_result called!")
+	print("[DEBUG ELO] result=", result, " my_score=", my_score, " opp_score=", opp_score)
+	print("[DEBUG ELO] elo_change from server=", elo_change, " PlayerData.elo BEFORE=", PlayerData.elo)
+	
+	# Calculate ELO client-side if server returned 0
+	if elo_change == 0:
+		last_elo_change = PlayerData.calculate_elo_change(PlayerData.elo, opp_elo_val, result)
+		print("[DEBUG ELO] Calculated client-side ELO: ", last_elo_change)
+	else:
+		last_elo_change = elo_change
+	
 	opponent_name = opp_name
 	opponent_elo = opp_elo_val
 	opponent_player_id = opp_pid
 	my_best_score = my_score
 	opponent_best_score = opp_score
 	PlayerData.apply_match_result(result, my_score, opp_score, opp_name, opp_elo_val, elo_change)
+	print("[DEBUG ELO] PlayerData.elo AFTER=", PlayerData.elo, " last_elo_change=", last_elo_change)
 	# Show results now that we have the actual ELO change from server
 	_show_results()
 
 func _on_opponent_disconnected(elo_change: int, my_score: int, opp_score: int,
 		opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
 	if current_state == State.PLAYING or current_state == State.COUNTDOWN:
-		last_elo_change = elo_change
+		# Calculate ELO client-side if server returned 0
+		if elo_change == 0:
+			last_elo_change = PlayerData.calculate_elo_change(PlayerData.elo, opp_elo_val, "win")
+		else:
+			last_elo_change = elo_change
 		opponent_name = opp_name
 		opponent_elo = opp_elo_val
 		PlayerData.apply_match_result("win", my_score, opp_score, opp_name, opp_elo_val, elo_change)

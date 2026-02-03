@@ -286,11 +286,18 @@ func _build_right_column() -> VBoxContainer:
 	preview_container.custom_minimum_size = Vector2(0, 140)
 	prof_vbox.add_child(preview_container)
 
+	# Container for the Node2D player
+	var player_holder = Control.new()
+	player_holder.custom_minimum_size = Vector2(80, 80)
+	preview_container.add_child(player_holder)
+
 	# Use actual Player scene for identical hat positioning as in-game
 	var player_scene = load("res://scenes/player.tscn")
 	player_preview_instance = player_scene.instantiate()
 	player_preview_instance.setup_for_menu_preview(80.0)  # 80px tile size for menu
-	preview_container.add_child(player_preview_instance)
+	# Center the Node2D in the holder (Node2D origin is at center of sprite)
+	player_preview_instance.position = Vector2(40, 40)
+	player_holder.add_child(player_preview_instance)
 
 	# Player name
 	profile_name_label = Label.new()

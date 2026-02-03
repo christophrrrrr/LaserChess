@@ -266,7 +266,17 @@ func equip_hat(hat_id: String) -> void:
 
 func apply_match_result(result: String, my_score: int, opp_score: int,
 		opp_name: String, opp_elo: int, elo_change: int) -> void:
-	elo += elo_change
+	# If server didn't calculate ELO (elo_change=0), calculate client-side
+	var actual_elo_change := elo_change
+	if elo_change == 0 and result != "draw":
+		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
+		print("[DEBUG ELO] Server returned 0, calculated client-side: ", actual_elo_change)
+	elif elo_change == 0 and result == "draw":
+		# For draws, still calculate a small change based on ELO difference
+		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
+		print("[DEBUG ELO] Draw - calculated client-side: ", actual_elo_change)
+	
+	elo += actual_elo_change
 	elo = max(100, elo)
 	total_games += 1
 
@@ -284,7 +294,7 @@ func apply_match_result(result: String, my_score: int, opp_score: int,
 		"my_score": my_score,
 		"opp_score": opp_score,
 		"result": result,
-		"elo_change": elo_change,
+		"elo_change": actual_elo_change,
 		"timestamp": int(Time.get_unix_time_from_system())
 	})
 	if matches.size() > 20:
@@ -293,6 +303,28 @@ func apply_match_result(result: String, my_score: int, opp_score: int,
 	_save_local()
 	if firebase_url != "":
 		save_to_firebase()
+
+## Calculate ELO change using standard chess formula (like chess.com)
+## K-factor = 32 (standard for online play)
+func calculate_elo_change(my_elo: int, opponent_elo: int, result: String) -> int:
+	const K_FACTOR := 32.0
+	
+	# Expected score formula: E = 1 / (1 + 10^((opponent_elo - my_elo) / 400))
+	var expected := 1.0 / (1.0 + pow(10.0, float(opponent_elo - my_elo) / 400.0))
+	
+	# Actual score: 1 for win, 0.5 for draw, 0 for loss
+	var actual := 0.5
+	match result:
+		"win":
+			actual = 1.0
+		"lose":
+			actual = 0.0
+		"draw":
+			actual = 0.5
+	
+	# ELO change = K * (actual - expected)
+	var change := K_FACTOR * (actual - expected)
+	return int(round(change))
 
 func get_win_rate() -> float:
 	if total_games == 0:

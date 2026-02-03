@@ -134,6 +134,8 @@ func _handle_message(text: String) -> void:
 		"opponent_score":
 			opponent_score_updated.emit(data.get("best_score", 0))
 		"match_result":
+			print("[DEBUG ELO] Received match_result from server: ", data)
+			print("[DEBUG ELO] elo_change in data: ", data.get("elo_change", "NOT_FOUND"))
 			match_result_received.emit(
 				data.get("result", "draw"),
 				data.get("my_score", 0),
