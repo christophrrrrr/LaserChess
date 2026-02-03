@@ -30,7 +30,7 @@ var high_score_label: Label
 var points_label: Label
 var record_label: Label
 var winrate_label: Label
-var player_king_tex: TextureRect
+var player_preview_instance: Node2D  # Player scene instance for preview
 
 # --- Left column (leaderboard) ---
 var lb_content: VBoxContainer
@@ -52,9 +52,7 @@ func _ready() -> void:
 	shop_panel.visible = false
 	_update_profile_sidebar()
 	_load_mini_leaderboard()
-
-	# React to hat changes
-	PlayerData.hat_changed.connect(func(_h): _update_player_model())
+	# Player scene handles hat_changed signal internally
 
 func _load_piece_textures() -> void:
 	var paths = [
@@ -137,10 +135,11 @@ func _build_layout() -> void:
 func _build_left_column() -> VBoxContainer:
 	var col = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER  # Center content vertically
 
-	# Leaderboard panel
+	# Leaderboard panel (no longer SIZE_EXPAND_FILL to avoid stretching)
 	var lb_panel = PanelContainer.new()
-	lb_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	lb_panel.custom_minimum_size = Vector2(0, 340)  # Fixed height for the panel
 	var ps = StyleBoxFlat.new()
 	ps.bg_color = Color(0.06, 0.06, 0.12, 0.9)
 	ps.set_corner_radius_all(10)
@@ -263,10 +262,11 @@ func _build_center_column() -> VBoxContainer:
 func _build_right_column() -> VBoxContainer:
 	var col = VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER  # Center content vertically
 
-	# Profile panel
+	# Profile panel (no longer SIZE_EXPAND_FILL to avoid stretching)
 	var prof_panel = PanelContainer.new()
-	prof_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	prof_panel.custom_minimum_size = Vector2(0, 340)  # Fixed height for the panel
 	var ps = StyleBoxFlat.new()
 	ps.bg_color = Color(0.06, 0.06, 0.12, 0.9)
 	ps.set_corner_radius_all(10)
@@ -286,22 +286,11 @@ func _build_right_column() -> VBoxContainer:
 	preview_container.custom_minimum_size = Vector2(0, 140)
 	prof_vbox.add_child(preview_container)
 
-	# Fixed-size container for king + hat
-	var model_holder = Control.new()
-	model_holder.custom_minimum_size = Vector2(90, 90)
-	model_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	preview_container.add_child(model_holder)
-
-	# King texture — centered at fixed position
-	player_king_tex = TextureRect.new()
-	player_king_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	player_king_tex.custom_minimum_size = Vector2(70, 70)
-	player_king_tex.size = Vector2(70, 70)
-	player_king_tex.position = Vector2(10, 10)  # Centered in 90x90 holder
-	player_king_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	model_holder.add_child(player_king_tex)
-
-	# Hat texture — positioned relative to king
+	# Use actual Player scene for identical hat positioning as in-game
+	var player_scene = load("res://scenes/player.tscn")
+	player_preview_instance = player_scene.instantiate()
+	player_preview_instance.setup_for_menu_preview(80.0)  # 80px tile size for menu
+	preview_container.add_child(player_preview_instance)
 
 	# Player name
 	profile_name_label = Label.new()
@@ -354,12 +343,8 @@ func _build_right_column() -> VBoxContainer:
 # =====================
 
 func _update_player_model() -> void:
-	# King texture
-	var king_path = GameSettings.get_player_king_texture()
-	if ResourceLoader.exists(king_path):
-		player_king_tex.texture = load(king_path)
-	else:
-		player_king_tex.texture = null
+	# Player scene instance handles hat display internally
+	pass
 
 func _update_profile_sidebar() -> void:
 	_update_player_model()

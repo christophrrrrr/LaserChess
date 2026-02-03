@@ -21,6 +21,10 @@ var glow: Sprite2D
 var king_texture: Texture2D
 var hat_node: Node2D = null
 
+# Menu preview mode (no game_board)
+var _menu_preview_mode: bool = false
+var _menu_tile_size: float = 64.0
+
 # Track keys pressed this frame for clean "just pressed" on raw keycodes
 var _keys_this_frame: Array = []
 
@@ -30,6 +34,10 @@ const MOVE_INITIAL_DELAY := 0.16   ## Delay before repeat starts (seconds)
 const MOVE_REPEAT_RATE := 0.09     ## Time between repeated moves when held
 
 func _ready() -> void:
+	# Skip game_board setup if in menu preview mode
+	if _menu_preview_mode:
+		return
+	
 	game_board = get_parent().get_node("GameBoard")
 	grid_size = game_board.grid_size
 
@@ -40,11 +48,21 @@ func _ready() -> void:
 	_create_hat()
 	PlayerData.hat_changed.connect(_on_hat_changed)
 
+## Call this BEFORE adding to tree to use player for menu preview display
+func setup_for_menu_preview(tile_size: float) -> void:
+	_menu_preview_mode = true
+	_menu_tile_size = tile_size
+	is_dead = true  # Disable input
+	_setup_visuals()
+	_create_hat()
+	PlayerData.hat_changed.connect(_on_hat_changed)
+
 func _setup_visuals() -> void:
 	king_texture = load(GameSettings.get_player_king_texture())
 
 	var tex_size = king_texture.get_size()
-	var target_size = game_board.tile_size * 0.8
+	var tile_size = _menu_tile_size if _menu_preview_mode else game_board.tile_size
+	var target_size = tile_size * 0.8
 	var scale_factor = target_size / max(tex_size.x, tex_size.y)
 
 	glow = Sprite2D.new()
@@ -116,7 +134,8 @@ func _create_hat() -> void:
 
 	# Scale (base fit to tile, then per-hat multiplier)
 	var tex_size := tex.get_size()
-	var target_size = game_board.tile_size * hat_base_scale
+	var tile_size = _menu_tile_size if _menu_preview_mode else game_board.tile_size
+	var target_size = tile_size * hat_base_scale
 	var scale_factor = target_size / max(tex_size.x, tex_size.y)
 	scale_factor *= scale_mul
 	hat_sprite.scale = Vector2(scale_factor, scale_factor)

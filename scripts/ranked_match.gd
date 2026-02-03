@@ -126,6 +126,8 @@ func _on_match_result(result: String, my_score: int, opp_score: int,
 	my_best_score = my_score
 	opponent_best_score = opp_score
 	PlayerData.apply_match_result(result, my_score, opp_score, opp_name, opp_elo_val, elo_change)
+	# Show results now that we have the actual ELO change from server
+	_show_results()
 
 func _on_opponent_disconnected(elo_change: int, my_score: int, opp_score: int,
 		opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
@@ -545,11 +547,7 @@ func _end_match() -> void:
 	hazard_spawner.spawn_timer.stop()
 	player.is_dead = true
 	NetworkManager.send_match_end(my_best_score)
-
-	await get_tree().create_timer(0.6).timeout
-	if not is_inside_tree():
-		return
-	_show_results()
+	# Results will be shown when _on_match_result is called by the server
 
 func _show_results() -> void:
 	_clear_result_content()
