@@ -812,7 +812,7 @@ func _create_compact_button(text: String, color: Color) -> Button:
 			"pressed": s.bg_color = color.darkened(0.15)
 		b.add_theme_stylebox_override(state, s)
 	b.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
-	b.add_theme_font_size_override("font_size", 13)
+	b.add_theme_font_size_override("font_size", 20)
 	b.add_theme_color_override("font_color", Color.WHITE)
 	return b
 
