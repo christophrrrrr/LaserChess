@@ -121,7 +121,7 @@ func _create_board() -> void:
 	
 	_create_wall_squares(offset, board_pixel_size)
 
-func _create_wall_squares(offset: float, board_pixel_size: float) -> void:
+func _create_wall_squares(offset: float, _board_pixel_size: float) -> void:
 	wall_squares["top"] = []
 	wall_squares["bottom"] = []
 	wall_squares["left"] = []

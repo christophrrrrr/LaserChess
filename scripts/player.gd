@@ -4,8 +4,10 @@ signal died
 
 @export var move_duration: float = 0.08
 @export var hat_offset: Vector2 = Vector2(1, 2)
-@export var hat_base_pos: Vector2 = Vector2(0, -30) # default hat position
+@export var hat_base_pos_tiles: Vector2 = Vector2(0, -45)
 @export var hat_base_scale: float = 0.40           # default hat size (relative to tile)
+@export var hat_menu_offset_tiles: Vector2 = Vector2(0, 100)
+
 
 
 var hat_sprite: Sprite2D = null
@@ -137,8 +139,14 @@ func _create_hat() -> void:
 	var rot_deg: float = float(tweak.get("rot_deg", 0.0))
 
 # Position
-	hat_sprite.position = hat_base_pos + extra_pos
+	var pos := hat_base_pos_tiles + extra_pos
 
+	if _menu_preview_mode:
+		pos += Vector2(0, 0.175) * _menu_tile_size
+
+	hat_sprite.position = pos
+
+	
 	# Rotation
 	hat_sprite.rotation = deg_to_rad(rot_deg)
 

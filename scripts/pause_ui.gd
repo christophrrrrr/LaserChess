@@ -29,7 +29,7 @@ func _build_ui() -> void:
 	
 	# Pause button in top-right
 	pause_button = Button.new()
-	pause_button.text = "❚❚"  # Pause icon
+	pause_button.text = "II"  # Pause icon (ASCII compatible)
 	pause_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	pause_button.position = Vector2(-80, 20)
 	pause_button.custom_minimum_size = Vector2(60, 60)

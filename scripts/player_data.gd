@@ -76,7 +76,7 @@ const HAT_PRICES := {
 	"bunny": 240,
 	"antlers": 260,
 	"viking": 280,
-	"spartann": 300,
+	"spartan": 300,
 
 	# === LEGENDARY (350–600) ===
 	"shark": 350,
@@ -501,24 +501,22 @@ func _random_name() -> String:
 
 func _build_shop_hats() -> void:
 	SHOP_HATS.clear()
+	
+	# Build shop from HAT_PRICES dictionary instead of scanning directory
+	# DirAccess doesn't work with res:// in exported builds!
+	# ResourceLoader.exists() can also be unreliable for dynamic paths in exports
+	for hat_id in HAT_PRICES.keys():
+		var hat_key: String = str(hat_id) # or String(hat_id)
 
-	var dir := DirAccess.open(HATS_DIR)
-	if dir == null:
-		push_warning("Hats folder not found: " + HATS_DIR)
-		return
+		var display_name: String = hat_key.replace("_", " ").capitalize()
+		var tex_path: String = HATS_DIR + hat_key + ".png"
 
-	dir.list_dir_begin()
-	var file := dir.get_next()
-	while file != "":
-		if !dir.current_is_dir() and file.to_lower().ends_with(".png"):
-			var id := file.get_basename() # filename without extension
-			var display_name := id.replace("_", " ").capitalize()
+		SHOP_HATS[hat_key] = {
+			"name": display_name,
+			"cost": HAT_PRICES[hat_id],
+			"desc": "Cosmetic hat",
+			"tex": tex_path
+		}
 
-			SHOP_HATS[id] = {
-				"name": display_name,
-				"cost": HAT_PRICES.get(id, DEFAULT_HAT_COST),
-				"desc": "Cosmetic hat",
-				"tex": HATS_DIR + "/" + file
-			}
-		file = dir.get_next()
-	dir.list_dir_end()
+	
+	print("[PlayerData] Built shop with ", SHOP_HATS.size(), " hats")

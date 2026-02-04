@@ -39,6 +39,9 @@ var error_flash: Label
 # === RESULTS ===
 var result_container: Control
 
+# === BACK BUTTON (Mobile) ===
+var back_button_layer: CanvasLayer
+
 # =====================
 # LIFECYCLE
 # =====================
@@ -56,6 +59,7 @@ func _ready() -> void:
 	player.is_dead = true
 
 	_setup_hud()
+	_setup_back_button()
 	_connect_signals()
 
 	_show_connecting()
@@ -835,3 +839,55 @@ func _pulse(node: Control, duration: float = 0.6) -> void:
 	tween.set_loops()
 	tween.tween_property(node, "modulate:a", 0.3, duration).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(node, "modulate:a", 1.0, duration).set_trans(Tween.TRANS_SINE)
+
+# =====================
+# BACK BUTTON (Mobile)
+# =====================
+
+func _setup_back_button() -> void:
+	back_button_layer = CanvasLayer.new()
+	back_button_layer.layer = 100
+	add_child(back_button_layer)
+	
+	var root = Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back_button_layer.add_child(root)
+	
+	var btn = Button.new()
+	btn.text = "< BACK"  # ASCII compatible
+	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	btn.position = Vector2(20, 20)
+	btn.custom_minimum_size = Vector2(120, 60)
+	btn.add_theme_font_size_override("font_size", 22)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+	_style_back_button(btn)
+	btn.pressed.connect(_on_back_button_pressed)
+	root.add_child(btn)
+
+func _style_back_button(btn: Button) -> void:
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = Color(0.1, 0.1, 0.15, 0.85)
+	normal.set_corner_radius_all(12)
+	normal.border_color = Color(0.3, 0.3, 0.4, 0.9)
+	normal.set_border_width_all(2)
+	btn.add_theme_stylebox_override("normal", normal)
+	
+	var hover = StyleBoxFlat.new()
+	hover.bg_color = Color(0.15, 0.15, 0.22, 0.95)
+	hover.set_corner_radius_all(12)
+	hover.border_color = Color(0.45, 0.45, 0.55, 1.0)
+	hover.set_border_width_all(2)
+	btn.add_theme_stylebox_override("hover", hover)
+	
+	var pressed = StyleBoxFlat.new()
+	pressed.bg_color = Color(0.08, 0.08, 0.12, 0.95)
+	pressed.set_corner_radius_all(12)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+
+func _on_back_button_pressed() -> void:
+	SoundManager.play("click")
+	NetworkManager.disconnect_from_server()
+	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")

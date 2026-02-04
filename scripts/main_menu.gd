@@ -326,6 +326,24 @@ func _build_right_panel() -> PanelContainer:
 	# Add a little padding so the text sits nicely
 	profile_name_edit.add_theme_constant_override("caret_width", 2)
 	profile_name_edit.add_theme_constant_override("minimum_character_width", 16)
+	
+	# CRITICAL: Enable virtual keyboard and make it editable
+	profile_name_edit.virtual_keyboard_enabled = true
+	profile_name_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_DEFAULT
+	profile_name_edit.editable = true
+	profile_name_edit.context_menu_enabled = true
+	profile_name_edit.selecting_enabled = true
+	profile_name_edit.caret_blink = true
+	
+	# Style for visibility
+	var edit_style = StyleBoxFlat.new()
+	edit_style.bg_color = Color(0.1, 0.1, 0.15)
+	edit_style.set_corner_radius_all(8)
+	edit_style.set_border_width_all(2)
+	edit_style.border_color = Color(0.4, 0.6, 0.8)
+	edit_style.set_content_margin_all(12)
+	profile_name_edit.add_theme_stylebox_override("normal", edit_style)
+	profile_name_edit.add_theme_stylebox_override("focus", edit_style)
 
 	profile_name_edit.visible = false
 	profile_name_edit.text_submitted.connect(func(_t): _save_name())
@@ -517,9 +535,9 @@ func _create_text_button(text: String) -> Button:
 # =====================
 
 func _update_player_model() -> void:
-	var king_path = GameSettings.get_player_king_texture()
+	var _king_path = GameSettings.get_player_king_texture()
 
-	var hat_id = PlayerData.equipped_hat
+	var _hat_id = PlayerData.equipped_hat
 
 
 func _update_profile_sidebar() -> void:
@@ -824,8 +842,12 @@ func _refresh_shop() -> void:
 		icon.custom_minimum_size = Vector2(52, 52)
 		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		var tex_path = hat.get("tex", "")
-		if tex_path != "" and ResourceLoader.exists(tex_path):
-			icon.texture = load(tex_path)
+		# Don't use ResourceLoader.exists() - it's unreliable in exports
+		# Just try to load and handle null gracefully
+		if tex_path != "":
+			var tex = load(tex_path)
+			if tex:
+				icon.texture = tex
 		hbox.add_child(icon)
 
 		var info = VBoxContainer.new()
@@ -1076,12 +1098,36 @@ func _on_name_edit_pressed() -> void:
 	if profile_name_edit.visible:
 		_save_name()
 	else:
-		profile_name_label.visible = false
-		profile_name_edit.visible = true
-		profile_name_edit.text = PlayerData.player_name
-		profile_name_edit.grab_focus()
-		profile_name_edit.select_all()
-		name_edit_button.text = "save"
+		# On HTML5/Web, use JavaScript prompt as fallback (Godot LineEdit has virtual keyboard issues)
+		if OS.has_feature("web"):
+			_show_web_name_prompt()
+		else:
+			# Native platforms - use normal LineEdit
+			profile_name_label.visible = false
+			profile_name_edit.visible = true
+			profile_name_edit.text = PlayerData.player_name
+			profile_name_edit.grab_focus()
+			profile_name_edit.select_all()
+			name_edit_button.text = "save"
+
+func _show_web_name_prompt() -> void:
+	# Use JavaScript prompt for web platform (works with mobile keyboards)
+	if OS.has_feature("web"):
+		var js_code = """
+		(function() {
+			var result = prompt('Enter your name:', '%s');
+			if (result !== null && result.trim() !== '') {
+				return result.trim().substring(0, 16);
+			}
+			return '';
+		})();
+		""" % PlayerData.player_name.replace("'", "\\'")
+		
+		var result = JavaScriptBridge.eval(js_code)
+		if result != null and str(result).strip_edges() != "":
+			PlayerData.set_player_name(str(result).strip_edges())
+			profile_name_label.text = PlayerData.player_name
+			_update_profile_sidebar()
 
 func _save_name() -> void:
 	var new_name = profile_name_edit.text.strip_edges()
