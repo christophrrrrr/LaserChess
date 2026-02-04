@@ -33,6 +33,16 @@ var _move_cooldown: float = 0.0
 const MOVE_INITIAL_DELAY := 0.16   ## Delay before repeat starts (seconds)
 const MOVE_REPEAT_RATE := 0.09     ## Time between repeated moves when held
 
+# === TOUCH/SWIPE CONTROLS ===
+var _touch_start_pos: Vector2 = Vector2.ZERO
+var _touch_start_time: float = 0.0
+var _is_touching: bool = false
+var _touch_index: int = -1  # Track which finger
+
+const SWIPE_THRESHOLD := 40.0      ## Minimum distance to register as swipe (pixels)
+const TAP_THRESHOLD := 25.0        ## Maximum movement to count as tap
+const TAP_TIME_THRESHOLD := 0.3    ## Maximum time for a tap (seconds)
+
 func _ready() -> void:
 	# Skip game_board setup if in menu preview mode
 	if _menu_preview_mode:
@@ -165,6 +175,57 @@ func _star_points(center: Vector2, size: float) -> PackedVector2Array:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_keys_this_frame.append(event.keycode)
+	
+	# === TOUCH INPUT HANDLING ===
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			# Finger down - start tracking
+			if not _is_touching:
+				_is_touching = true
+				_touch_index = event.index
+				_touch_start_pos = event.position
+				_touch_start_time = Time.get_ticks_msec() / 1000.0
+		else:
+			# Finger up - check for swipe or tap
+			if _is_touching and event.index == _touch_index:
+				_handle_touch_release(event.position)
+				_is_touching = false
+				_touch_index = -1
+
+func _handle_touch_release(end_pos: Vector2) -> void:
+	if is_moving or is_dead:
+		return
+	
+	var delta = end_pos - _touch_start_pos
+	var distance = delta.length()
+	var elapsed = (Time.get_ticks_msec() / 1000.0) - _touch_start_time
+	
+	# Check if it's a tap (small movement, quick release)
+	if distance < TAP_THRESHOLD and elapsed < TAP_TIME_THRESHOLD:
+		_try_press()
+		return
+	
+	# Check if it's a swipe (enough distance)
+	if distance >= SWIPE_THRESHOLD:
+		var direction = _get_swipe_direction(delta)
+		if direction != Vector2i.ZERO:
+			_try_move(direction)
+			_move_cooldown = MOVE_INITIAL_DELAY
+
+func _get_swipe_direction(delta: Vector2) -> Vector2i:
+	# Determine primary direction based on larger axis
+	if abs(delta.x) > abs(delta.y):
+		# Horizontal swipe
+		if delta.x > 0:
+			return Vector2i.RIGHT
+		else:
+			return Vector2i.LEFT
+	else:
+		# Vertical swipe
+		if delta.y > 0:
+			return Vector2i.DOWN
+		else:
+			return Vector2i.UP
 
 func _process(delta: float) -> void:
 	if is_moving or is_dead:
@@ -329,6 +390,10 @@ func reset() -> void:
 	is_dead = false
 	_keys_this_frame.clear()
 	_move_cooldown = 0.0
+	
+	# Reset touch state
+	_is_touching = false
+	_touch_index = -1
 
 	sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	glow.modulate = Color(1.0, 0.8, 0.0, 0.5)

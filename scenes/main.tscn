@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://d4l4xdm13fk66"]
+[gd_scene load_steps=7 format=3 uid="uid://d4l4xdm13fk66"]
 
 [ext_resource type="PackedScene" uid="uid://p7j5mhd8x8ju" path="res://scenes/game_board.tscn" id="1_o5qli"]
 [ext_resource type="PackedScene" uid="uid://byb83hoq0ndhs" path="res://scenes/player.tscn" id="2_0wfyh"]
 [ext_resource type="PackedScene" uid="uid://bguh80om3o2as" path="res://scenes/score_ui.tscn" id="3_sugp2"]
 [ext_resource type="PackedScene" uid="uid://xklv3sj16ova" path="res://scenes/hazard_spawner.tscn" id="4_jyhfs"]
 [ext_resource type="PackedScene" uid="uid://c8gkffxrmbwts" path="res://scenes/GameOverUI.tscn" id="5_tbgi4"]
+[ext_resource type="PackedScene" uid="uid://cr87ws483l3ae" path="res://scenes/pause_ui.tscn" id="6_tefeu"]
 
 [node name="Main" type="Node2D"]
 
@@ -24,3 +25,5 @@ difficulty_scale = 0.7
 max_hazards_per_spawn = 5
 
 [node name="GameOverUI" parent="." instance=ExtResource("5_tbgi4")]
+
+[node name="PauseUI" parent="." instance=ExtResource("6_tefeu")]
