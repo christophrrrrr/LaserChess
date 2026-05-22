@@ -75,7 +75,6 @@ func is_online() -> bool:
 	return _was_connected and _socket != null
 
 func join_lobby() -> void:
-	print("[DEBUG LOBBY] join_lobby called with name='", PlayerData.player_name, "' elo=", PlayerData.elo, " player_id='", PlayerData.player_id, "'")
 	_send({
 		"type": "join_lobby",
 		"player_id": PlayerData.player_id,
@@ -96,7 +95,6 @@ func send_match_end(best_score: int) -> void:
 	_send({"type": "match_end", "best_score": best_score})
 
 func rejoin_lobby() -> void:
-	print("[DEBUG LOBBY] rejoin_lobby called with name='", PlayerData.player_name, "' elo=", PlayerData.elo)
 	_send({
 		"type": "rejoin_lobby",
 		"name": PlayerData.player_name,
@@ -107,7 +105,6 @@ func rejoin_lobby() -> void:
 func update_player_info() -> void:
 	if not is_online():
 		return
-	print("[DEBUG LOBBY] update_player_info called with name='", PlayerData.player_name, "' elo=", PlayerData.elo)
 	_send({
 		"type": "update_info",
 		"name": PlayerData.player_name,
@@ -147,8 +144,6 @@ func _handle_message(text: String) -> void:
 		"opponent_score":
 			opponent_score_updated.emit(data.get("best_score", 0))
 		"match_result":
-			print("[DEBUG ELO] Received match_result from server: ", data)
-			print("[DEBUG ELO] elo_change in data: ", data.get("elo_change", "NOT_FOUND"))
 			match_result_received.emit(
 				data.get("result", "draw"),
 				data.get("my_score", 0),

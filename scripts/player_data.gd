@@ -107,14 +107,10 @@ const HAT_TWEAKS := {
 	"beanie": {"pos": Vector2(-3,5), "scale": 1, "rot_deg": 45},
 	"beret": {"pos": Vector2(0,0), "scale": 0.8, "rot_deg": 20},
 	"baseballCap": {"pos": Vector2(5,5), "scale": 1, "rot_deg": 0},
-	"takuhatsugasa": {"pos": Vector2(0,3), "scale": 1, "rot_deg": 0},
 	"spartan": {"pos": Vector2(0,6), "scale": 1, "rot_deg": 0},
-	"robinhood": {"pos": Vector2(0,1), "scale": 1.1, "rot_deg": 0},
 	"redBonnet": {"pos": Vector2(0,5), "scale": 0.9, "rot_deg": 0},
-	"waldo": {"pos": Vector2(-7,5), "scale": 1, "rot_deg": 20},
 	"50sMilitary": {"pos": Vector2(0,2), "scale": 1, "rot_deg": 0},
 	"50sNurse": {"pos": Vector2(-2,2), "scale": 1, "rot_deg": 0},
-	"beanieWithTassels": {"pos": Vector2(-8,12), "scale": 1.2, "rot_deg": 10},
 	"lumberjack": {"pos": Vector2(-2,10), "scale": 1.5, "rot_deg": 0},
 	"bicorn": {"pos": Vector2(-3,5), "scale": 1.2, "rot_deg": 0},
 	"fez": {"pos": Vector2(-3,5), "scale": 0.9, "rot_deg": 0},
@@ -125,7 +121,22 @@ const HAT_TWEAKS := {
 	"horseHead": {"pos": Vector2(5,5), "scale": 1.5, "rot_deg": 0},
 	"freakazoid": {"pos": Vector2(-11,5), "scale": 1.5, "rot_deg": 0},
 	"crown": {"pos": Vector2(-3,5), "scale": 1.4, "rot_deg": 0},
-	
+	"bowlerHat":     {"pos": Vector2(-3,  5), "scale": 1.1, "rot_deg": 0},
+	"outback":       {"pos": Vector2(-3,  3), "scale": 1.2, "rot_deg": 0},
+	"police":        {"pos": Vector2(-3,  5), "scale": 1.0, "rot_deg": 0},
+	"hardHat":       {"pos": Vector2(-3,  5), "scale": 1.0, "rot_deg": 0},
+	"fireman":       {"pos": Vector2(-3,  3), "scale": 1.2, "rot_deg": 0},
+	"cowboy":        {"pos": Vector2(-3,  2), "scale": 1.3, "rot_deg": 0},
+	"classicFedora": {"pos": Vector2(-3,  5), "scale": 1.1, "rot_deg": 0},
+	"tophat":        {"pos": Vector2(-3,  3), "scale": 1.0, "rot_deg": 0},
+	"captains":      {"pos": Vector2(-3,  5), "scale": 1.0, "rot_deg": 0},
+	"wig":           {"pos": Vector2(-5,  5), "scale": 1.4, "rot_deg": 0},
+	"catEars":       {"pos": Vector2(-3,  0), "scale": 1.1, "rot_deg": 0},
+	"bunny":         {"pos": Vector2(-5, -2), "scale": 1.3, "rot_deg": 0},
+	"antlers":       {"pos": Vector2(-5, -5), "scale": 1.5, "rot_deg": 0},
+	"viking":        {"pos": Vector2(-5,  3), "scale": 1.3, "rot_deg": 0},
+	"skeleton":      {"pos": Vector2(-3,  3), "scale": 1.3, "rot_deg": 0},
+	"ww1German":     {"pos": Vector2(-3,  3), "scale": 1.2, "rot_deg": 0},
 }
 
 
@@ -270,11 +281,8 @@ func apply_match_result(result: String, my_score: int, opp_score: int,
 	var actual_elo_change := elo_change
 	if elo_change == 0 and result != "draw":
 		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
-		print("[DEBUG ELO] Server returned 0, calculated client-side: ", actual_elo_change)
 	elif elo_change == 0 and result == "draw":
-		# For draws, still calculate a small change based on ELO difference
 		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
-		print("[DEBUG ELO] Draw - calculated client-side: ", actual_elo_change)
 	
 	elo += actual_elo_change
 	elo = max(100, elo)
@@ -419,7 +427,7 @@ func load_leaderboard() -> void:
 		leaderboard_loaded.emit([])
 		return
 
-	var url = firebase_url + "/players.json?orderBy=\"elo\"&limitToLast=50"
+	var url = firebase_url + "/players.json?orderBy=\"elo\"&limitToLast=200"
 	var http = HTTPRequest.new()
 	add_child(http)
 	http.request_completed.connect(_on_leaderboard_loaded.bind(http))

@@ -8,8 +8,6 @@
 
 [node name="RankedMatch" type="Node2D"]
 script = ExtResource("1_ovo0j")
-match_duration = null
-countdown_duration = null
 
 [node name="GameBoard" parent="." instance=ExtResource("1_wwxbh")]
 knight_warning_time = 1.0
@@ -25,3 +23,202 @@ position = Vector2(400, 400)
 min_interval = 0.5
 difficulty_scale = 0.7
 max_hazards_per_spawn = 5
+
+[node name="MatchHUD" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="TimerLabel" type="Label" parent="MatchHUD"]
+anchor_left = 0.5
+anchor_top = 0.0
+anchor_right = 0.5
+anchor_bottom = 0.0
+offset_left = -60.0
+offset_top = 12.0
+offset_right = 60.0
+offset_bottom = 52.0
+custom_minimum_size = Vector2(120, 0)
+text = "1:15"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.6)
+theme_override_constants/shadow_offset_x = 2
+theme_override_constants/shadow_offset_y = 2
+visible = false
+
+[node name="MyPanel" type="PanelContainer" parent="MatchHUD"]
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_left = 15.0
+offset_top = -80.0
+offset_right = 145.0
+offset_bottom = -15.0
+custom_minimum_size = Vector2(130, 65)
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="MatchHUD/MyPanel"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 0
+
+[node name="MyNameLabel" type="Label" parent="MatchHUD/MyPanel/VBox"]
+layout_mode = 2
+text = "YOU  (best)"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+
+[node name="MyScoreLabel" type="Label" parent="MatchHUD/MyPanel/VBox"]
+layout_mode = 2
+text = "0"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 32
+
+[node name="OppPanel" type="PanelContainer" parent="MatchHUD"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -145.0
+offset_top = -80.0
+offset_right = -15.0
+offset_bottom = -15.0
+custom_minimum_size = Vector2(130, 65)
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="MatchHUD/OppPanel"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 0
+
+[node name="OppNameLabel" type="Label" parent="MatchHUD/OppPanel/VBox"]
+layout_mode = 2
+text = "OPP  (best)"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 13
+
+[node name="OppScoreLabel" type="Label" parent="MatchHUD/OppPanel/VBox"]
+layout_mode = 2
+text = "0"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 32
+
+[node name="CountdownLabel" type="Label" parent="MatchHUD"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -60.0
+offset_right = 100.0
+offset_bottom = 60.0
+custom_minimum_size = Vector2(200, 120)
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 96
+theme_override_colors/font_color = Color(1.0, 0.85, 0.2, 1)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0.7)
+theme_override_constants/shadow_offset_x = 3
+theme_override_constants/shadow_offset_y = 3
+visible = false
+
+[node name="LobbyContainer" type="Control" parent="MatchHUD"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+visible = false
+
+[node name="LobbyBG" type="ColorRect" parent="MatchHUD/LobbyContainer"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+color = Color(0.03, 0.03, 0.08, 0.92)
+
+[node name="LobbyCenter" type="CenterContainer" parent="MatchHUD/LobbyContainer"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+
+[node name="LobbyContent" type="VBoxContainer" parent="MatchHUD/LobbyContainer/LobbyCenter"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 0
+
+[node name="ErrorFlash" type="Label" parent="MatchHUD/LobbyContainer"]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -150.0
+offset_top = -25.0
+offset_right = 150.0
+offset_bottom = 0.0
+custom_minimum_size = Vector2(300, 0)
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(1.0, 0.5, 0.3, 1)
+visible = false
+
+[node name="ResultContainer" type="Control" parent="MatchHUD"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+visible = false
+
+[node name="Overlay" type="ColorRect" parent="MatchHUD/ResultContainer"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+color = Color(0, 0, 0, 0.75)
+
+[node name="BackButtonLayer" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="BackButtonRoot" type="Control" parent="BackButtonLayer"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+mouse_filter = 2
+
+[node name="BackButton" type="Button" parent="BackButtonLayer/BackButtonRoot"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 140.0
+offset_bottom = 80.0
+custom_minimum_size = Vector2(120, 60)
+text = "< BACK"
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 1, 1, 1)
