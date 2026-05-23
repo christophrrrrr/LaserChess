@@ -40,8 +40,10 @@ var active_hazards: int = 0
 # Score
 var score: int = 0
 
-# Seeded RNG — deterministic when seed is set, random otherwise
+# Seeded RNG — used only for TARGET placement
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+# Separate seeded RNG — used only for HAZARD spawning so boards stay in sync
+var hazard_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 # Colors
 var color_floor_normal := Color(0.15, 0.15, 0.25)
@@ -82,6 +84,7 @@ var pieces_container: Node2D
 func _ready() -> void:
 	# Default: randomize (solo mode). Ranked mode calls set_match_seed() before play starts.
 	rng.randomize()
+	hazard_rng.randomize()
 
 	var crack_shader: Shader = load("res://shaders/danger_crack.gdshader")
 	_danger_material = ShaderMaterial.new()
@@ -101,9 +104,20 @@ func _ready() -> void:
 # === SEEDED RNG API ===
 
 func set_match_seed(seed_value: int) -> void:
-	## Call this before the match starts to make hazards deterministic.
-	## Both players use the same seed → identical hazard sequences.
+	## Seed both RNGs before a ranked match so both players see identical boards.
+	## rng (targets) and hazard_rng (hazards) are kept separate so collecting
+	## a target at a different time doesn't shift the hazard sequence.
 	rng.seed = seed_value
+	hazard_rng.seed = seed_value
+	# Clear any target placed by _ready() / a previous reset and place the first
+	# seeded one so both players start with the same square highlighted.
+	for sq in active_targets:
+		sq.set_meta("is_target", false)
+		_stop_square_tween(sq, "pulse_tween")
+		var r := sq.get_meta("rect") as ColorRect
+		r.color = color_wall_normal if sq.get_meta("is_wall", false) else color_floor_normal
+	active_targets.clear()
+	spawn_target_square()
 
 func get_current_seed() -> int:
 	return rng.seed
@@ -407,9 +421,9 @@ func _deactivate_target(square: Node2D) -> void:
 # =====================
 
 func spawn_rook_hazard() -> void:
-	var is_row = rng.randf() < 0.5
-	var index = rng.randi() % grid_size
-	var reverse = rng.randf() < 0.5
+	var is_row = hazard_rng.randf() < 0.5
+	var index = hazard_rng.randi() % grid_size
+	var reverse = hazard_rng.randf() < 0.5
 	
 	var positions: Array[Vector2i] = []
 	var start_pos: Vector2
@@ -437,11 +451,11 @@ func spawn_bishop_hazard() -> void:
 	var positions: Array[Vector2i] = []
 	var start_pos: Vector2
 	
-	var diagonal_type = rng.randi() % 4
-	
+	var diagonal_type = hazard_rng.randi() % 4
+
 	match diagonal_type:
 		0:
-			var start_col = rng.randi() % grid_size
+			var start_col = hazard_rng.randi() % grid_size
 			var col = start_col
 			var row = 0
 			while col < grid_size and row < grid_size:
@@ -450,7 +464,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(start_col - 1, -1))
 		1:
-			var start_row = rng.randi() % grid_size
+			var start_row = hazard_rng.randi() % grid_size
 			var col = 0
 			var row = start_row
 			while col < grid_size and row < grid_size:
@@ -459,7 +473,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(-1, start_row - 1))
 		2:
-			var start_col = rng.randi() % grid_size
+			var start_col = hazard_rng.randi() % grid_size
 			var col = start_col
 			var row = 0
 			while col >= 0 and row < grid_size:
@@ -468,7 +482,7 @@ func spawn_bishop_hazard() -> void:
 				row += 1
 			start_pos = grid_to_world(Vector2i(start_col + 1, -1))
 		3:
-			var start_row = rng.randi() % grid_size
+			var start_row = hazard_rng.randi() % grid_size
 			var col = grid_size - 1
 			var row = start_row
 			while col >= 0 and row < grid_size:
@@ -481,7 +495,7 @@ func spawn_bishop_hazard() -> void:
 		_execute_hazard_with_piece(positions, bishop_texture, start_pos, color_danger_bishop)
 
 func spawn_knight_hazard() -> void:
-	var start_pos = Vector2i(rng.randi() % grid_size, rng.randi() % grid_size)
+	var start_pos = Vector2i(hazard_rng.randi() % grid_size, hazard_rng.randi() % grid_size)
 	_execute_knight_hazard(start_pos)
 
 func _get_valid_knight_moves(from_pos: Vector2i) -> Array[Vector2i]:
@@ -628,7 +642,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		if valid_moves.is_empty():
 			break
 
-		var target_pos = valid_moves[rng.randi() % valid_moves.size()]
+		var target_pos = valid_moves[hazard_rng.randi() % valid_moves.size()]
 		_mark_danger(target_pos, color_danger_knight)
 		SoundManager.play("warning")
 
@@ -650,7 +664,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 
 		await _knight_squash(piece, base_scale)
 
-		if player and not player.is_dead:
+		if player and not player.is_dead and not player.invincible:
 			if player.grid_pos == target_pos:
 				player_hit.emit()
 				player.die()
@@ -786,7 +800,7 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 			square.set_meta("flash_tween", flash_tween)
 		
 		# Check collision AFTER piece has arrived
-		if player and not player.is_dead:
+		if player and not player.is_dead and not player.invincible:
 			if player.grid_pos == pos:
 				player_hit.emit()
 				player.die()
@@ -807,8 +821,8 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 # =====================
 
 func spawn_pawn_hazard() -> void:
-	var col := rng.randi() % grid_size
-	var moving_down := rng.randf() < 0.5
+	var col := hazard_rng.randi() % grid_size
+	var moving_down := hazard_rng.randf() < 0.5
 	_execute_pawn_hazard(col, moving_down)
 
 func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
@@ -944,7 +958,7 @@ func _pawn_dwell_watch(piece: Node2D, start_col: int, diagonals: Array[Vector2i]
 			current_col = d.x
 
 			# Kill if player is still on that square
-			if player and not player.is_dead and player.grid_pos == d:
+			if player and not player.is_dead and not player.invincible and player.grid_pos == d:
 				player_hit.emit()
 				player.die()
 				return current_col
@@ -960,7 +974,7 @@ func spawn_random_hazard() -> void:
 		return
 
 	# Weighted: rook ~29%, bishop ~29%, knight ~29%, pawn ~14%
-	var roll := rng.randi() % 7
+	var roll := hazard_rng.randi() % 7
 	match roll:
 		0, 1: spawn_rook_hazard()
 		2, 3: spawn_bishop_hazard()

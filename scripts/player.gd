@@ -16,6 +16,7 @@ var grid_pos: Vector2i = Vector2i(2, 2)
 var is_moving: bool = false
 var grid_size: int = 6
 var is_dead: bool = false
+var invincible: bool = false   # true for 1.5 s after respawn — hazards can't kill
 
 var game_board: Node2D
 
@@ -398,6 +399,7 @@ func reset() -> void:
 	rotation = 0
 	is_moving = false
 	is_dead = false
+	invincible = false
 	_keys_this_frame.clear()
 	_move_cooldown = 0.0
 	

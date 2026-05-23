@@ -526,14 +526,17 @@ func _on_player_died_ranked() -> void:
 	spectate_label.visible = false
 	_is_spectating = false
 
-	# Respawn — score is NOT reset (10 s wait is the punishment)
+	# Respawn — score and board are NOT reset (10 s wait is the punishment)
 	player.reset()
-	game_board.reset()
-	hazard_spawner.reset()
+	player.invincible = true
+	hazard_spawner.resume()
 
 	player.modulate.a = 0.0
 	var flash := create_tween()
 	flash.tween_property(player, "modulate:a", 1.0, 0.4)
+	await get_tree().create_timer(1.5).timeout
+	if is_inside_tree() and current_state == State.PLAYING:
+		player.invincible = false
 
 # =====================
 # MATCH END

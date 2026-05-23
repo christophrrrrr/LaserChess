@@ -65,3 +65,8 @@ func reset() -> void:
 	is_active = true
 	spawn_timer.stop()
 	spawn_timer.start(initial_delay)
+
+## Restart spawning after a ranked respawn — keeps current difficulty, brief pause before next hazard
+func resume() -> void:
+	is_active = true
+	spawn_timer.start(initial_delay)
