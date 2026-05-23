@@ -132,6 +132,8 @@ func _handle_message(text: String) -> void:
 		return
 
 	var msg_type = data.get("type", "")
+	if msg_type != "lobby_list" and msg_type != "opponent_score":
+		print("[NET] received: ", msg_type)
 	match msg_type:
 		"welcome":
 			session_id = data.get("session_id", -1)

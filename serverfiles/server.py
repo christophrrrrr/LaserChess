@@ -242,7 +242,10 @@ async def handler(ws):
                     m = player.match
                     if m and not m.ended:
                         opp = m.p2 if player == m.p1 else m.p1
+                        print(f"  [GHOST] relaying {player.name} -> {opp.name} ({data.get('x')},{data.get('y')})")
                         await _send(opp.ws, {"type": "opponent_ghost", "x": data.get("x", 0), "y": data.get("y", 0)})
+                    else:
+                        print(f"  [GHOST] {player.name} sent ghost_pos but match={m}")
                 elif t == "match_end":
                     await _handle_match_end(player, data)
                 elif t == "rejoin_lobby":
