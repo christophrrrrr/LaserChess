@@ -809,10 +809,13 @@ func _create_ghost() -> void:
 func _on_player_moved(new_pos: Vector2i) -> void:
 	if current_state != State.PLAYING:
 		return
+	print("[GHOST] sending my pos: ", new_pos.x, ", ", new_pos.y)
 	NetworkManager.send_ghost_pos(new_pos.x, new_pos.y)
 
 func _on_opponent_ghost_updated(x: int, y: int) -> void:
+	print("[GHOST] received opponent pos: ", x, ", ", y)
 	if not (_ghost_sprite and is_instance_valid(_ghost_sprite)):
+		print("[GHOST] sprite missing, ignoring")
 		return
 	var target_pos: Vector2 = game_board.grid_to_world(Vector2i(x, y))
 	if _ghost_slide_tween and _ghost_slide_tween.is_valid():

@@ -912,6 +912,8 @@ func _pawn_dwell_watch(piece: Node2D, start_col: int, diagonals: Array[Vector2i]
 			return current_col
 		if not is_instance_valid(piece):
 			return current_col
+		if not is_inside_tree():
+			return current_col
 
 		await get_tree().process_frame
 
