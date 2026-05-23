@@ -53,11 +53,16 @@ var color_wall_target := Color(0.0, 0.8, 1.0)
 var color_danger_rook   := Color(1.0, 0.12, 0.12, 0.85)   # classic red
 var color_danger_bishop := Color(1.0, 0.45, 0.05, 0.85)   # orange-red
 var color_danger_knight := Color(0.85, 0.05, 0.45, 0.85)  # deep crimson-rose
+var color_danger_pawn   := Color(0.95, 0.75, 0.1, 0.85)  # yellow/gold
 
 # Chess piece textures
 var rook_texture: Texture2D
 var bishop_texture: Texture2D
 var knight_texture: Texture2D
+var pawn_texture: Texture2D
+
+# Shared shader material applied to all danger squares (crack effect)
+var _danger_material: ShaderMaterial
 
 # Signals
 signal square_hit(is_wall: bool)
@@ -77,10 +82,14 @@ var pieces_container: Node2D
 func _ready() -> void:
 	# Default: randomize (solo mode). Ranked mode calls set_match_seed() before play starts.
 	rng.randomize()
-	
+
+	var crack_shader: Shader = load("res://shaders/danger_crack.gdshader")
+	_danger_material = ShaderMaterial.new()
+	_danger_material.shader = crack_shader
+
 	_load_chess_pieces()
 	_create_board()
-	
+
 	pieces_container = Node2D.new()
 	pieces_container.z_index = 10
 	add_child(pieces_container)
@@ -104,6 +113,7 @@ func _load_chess_pieces() -> void:
 	rook_texture = load(textures["rook"])
 	bishop_texture = load(textures["bishop"])
 	knight_texture = load(textures["knight"])
+	pawn_texture = load(textures["pawn"])
 
 func _create_board() -> void:
 	var board_pixel_size = grid_size * (tile_size + tile_gap) - tile_gap
@@ -510,6 +520,7 @@ func _mark_danger(pos: Vector2i, danger_color: Color = color_danger_rook) -> voi
 		if not was_danger:
 			square.set_meta("is_danger", true)
 			_stop_square_tween(square, "pulse_tween")
+			(square.get_meta("rect") as ColorRect).material = _danger_material
 		square.set_meta("danger_color", _mix_danger_colors(danger_colors[pos]))
 		_start_danger_pulse(square)
 
@@ -533,6 +544,7 @@ func _unmark_danger(pos: Vector2i, danger_color: Color = color_danger_rook) -> v
 			_stop_square_tween(square, "flash_tween")
 
 			var rect = square.get_meta("rect") as ColorRect
+			rect.material = null
 			var base_color = _get_square_base_color(square)
 			rect.color = base_color
 
@@ -790,19 +802,168 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 		exit_tween.tween_property(piece, "position", exit_pos, hazard_slide_speed * 2)
 		await exit_tween.finished
 
+# =====================
+# PAWN HAZARD
+# =====================
+
+func spawn_pawn_hazard() -> void:
+	var col := rng.randi() % grid_size
+	var moving_down := rng.randf() < 0.5
+	_execute_pawn_hazard(col, moving_down)
+
+func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
+	if is_resetting:
+		return
+
+	active_hazards += 1
+
+	# Sprite glows red so the piece reads as dangerous even with yellow floor squares
+	var piece = _create_chess_piece_sprite(pawn_texture, Color(1.0, 0.15, 0.0))
+	pieces_container.add_child(piece)
+
+	var step_dir  := 1 if moving_down else -1
+	var start_row := -1 if moving_down else grid_size
+
+	piece.position = grid_to_world(Vector2i(col, start_row))
+	piece.modulate.a = 0
+
+	var fade_in = create_tween()
+	fade_in.tween_property(piece, "modulate:a", 1.0, piece_fade_in_time)
+	await fade_in.finished
+
+	if is_resetting or not is_instance_valid(piece):
+		if is_instance_valid(piece): piece.queue_free()
+		active_hazards -= 1
+		return
+
+	# Warning pause — pawn is visible on the edge so the player has time to react
+	SoundManager.play("warning")
+	await get_tree().create_timer(hazard_warning_time).timeout
+
+	if is_resetting or not is_instance_valid(piece):
+		if is_instance_valid(piece): piece.queue_free()
+		active_hazards -= 1
+		return
+
+	var current_row := start_row
+
+	while true:
+		if is_resetting or not is_instance_valid(piece):
+			if is_instance_valid(piece): piece.queue_free()
+			active_hazards -= 1
+			return
+
+		current_row += step_dir
+
+		# Slide to next square
+		var target_world = grid_to_world(Vector2i(col, current_row))
+		var slide = create_tween()
+		slide.tween_property(piece, "position", target_world, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+		await slide.finished
+
+		if is_resetting or not is_instance_valid(piece):
+			if is_instance_valid(piece): piece.queue_free()
+			active_hazards -= 1
+			return
+
+		# Off-board — exit loop
+		if current_row < 0 or current_row >= grid_size:
+			break
+
+		# Mark capture diagonals and dwell
+		var diagonals := _get_pawn_diagonals(col, current_row, moving_down)
+		for d in diagonals:
+			_mark_danger(d, color_danger_pawn)
+
+		col = await _pawn_dwell_watch(piece, col, diagonals, 1.0, 0.5)
+
+		for d in diagonals:
+			_unmark_danger(d, color_danger_pawn)
+
+		if is_resetting:
+			if is_instance_valid(piece): piece.queue_free()
+			active_hazards -= 1
+			return
+
+	# Fade out off-board
+	if is_instance_valid(piece):
+		var fade_out = create_tween()
+		fade_out.tween_property(piece, "modulate:a", 0.0, piece_fade_out_time)
+		fade_out.tween_callback(piece.queue_free)
+
+	active_hazards -= 1
+
+func _get_pawn_diagonals(col: int, row: int, moving_down: bool) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	var diag_row := row + (1 if moving_down else -1)
+	for dc in [-1, 1]:
+		var d := Vector2i(col + dc, diag_row)
+		if d.x >= 0 and d.x < grid_size and d.y >= 0 and d.y < grid_size:
+			result.append(d)
+	return result
+
+func _pawn_dwell_watch(piece: Node2D, start_col: int, diagonals: Array[Vector2i], dwell_time: float, lunge_duration: float) -> int:
+	var dwell_end_ms := Time.get_ticks_msec() + int(dwell_time * 1000)
+	var is_lunging   := false
+	var current_col  := start_col
+
+	while Time.get_ticks_msec() < dwell_end_ms:
+		if is_resetting:
+			return current_col
+		if not is_instance_valid(piece):
+			return current_col
+
+		await get_tree().process_frame
+
+		if is_lunging:
+			continue
+
+		if not (player and not player.is_dead):
+			continue
+
+		# Check if player stepped onto any diagonal
+		for d in diagonals:
+			if player.grid_pos != d:
+				continue
+
+			# Player is on diagonal — pawn lunges!
+			is_lunging = true
+			SoundManager.play("warning")
+
+			var lunge = create_tween()
+			lunge.tween_property(piece, "position", grid_to_world(d), lunge_duration) \
+				.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+			await lunge.finished
+
+			if is_resetting or not is_instance_valid(piece):
+				return current_col
+
+			# Pawn has arrived — commit to the new lane regardless of outcome
+			current_col = d.x
+
+			# Kill if player is still on that square
+			if player and not player.is_dead and player.grid_pos == d:
+				player_hit.emit()
+				player.die()
+				return current_col
+
+			# Player dodged — continue marching from new lane
+			is_lunging = false
+			break  # resume watching from next frame
+
+	return current_col
+
 func spawn_random_hazard() -> void:
 	if is_resetting:
 		return
-	
-	var hazard_type = rng.randi() % 3
-	
-	match hazard_type:
-		0:
-			spawn_rook_hazard()
-		1:
-			spawn_bishop_hazard()
-		2:
-			spawn_knight_hazard()
+
+	# Weighted: rook ~29%, bishop ~29%, knight ~29%, pawn ~14%
+	var roll := rng.randi() % 7
+	match roll:
+		0, 1: spawn_rook_hazard()
+		2, 3: spawn_bishop_hazard()
+		4, 5: spawn_knight_hazard()
+		6:    spawn_pawn_hazard()
 
 # =====================
 # RESET
@@ -824,8 +985,9 @@ func reset() -> void:
 		_stop_square_tween(square, "flash_tween")
 		square.set_meta("is_target", false)
 		square.set_meta("is_danger", false)
-		
+
 		var rect = square.get_meta("rect") as ColorRect
+		rect.material = null
 		rect.color = color_floor_normal
 		square.scale = Vector2.ONE
 	

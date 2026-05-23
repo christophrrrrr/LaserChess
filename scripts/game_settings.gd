@@ -10,6 +10,9 @@ var high_score: int = 0
 var sfx_volume: float = 1.0
 var master_volume: float = 1.0
 
+# === UI PREFS ===
+var leaderboard_tab: String = "elo"  # "elo" or "solo"
+
 const SAVE_PATH = "user://settings.cfg"
 
 func _ready() -> void:
@@ -26,13 +29,15 @@ func get_enemy_textures() -> Dictionary:
 		return {
 			"rook": "res://assets/rook1.png",
 			"bishop": "res://assets/bishop1.png",
-			"knight": "res://assets/knight1.png"
+			"knight": "res://assets/knight1.png",
+			"pawn": "res://assets/pawn1.png"
 		}
 	else:
 		return {
 			"rook": "res://assets/rook.png",
 			"bishop": "res://assets/bishop.png",
-			"knight": "res://assets/knight.png"
+			"knight": "res://assets/knight.png",
+			"pawn": "res://assets/pawn.png"
 		}
 
 func toggle_colors() -> void:
@@ -45,6 +50,10 @@ func update_high_score(score: int) -> void:
 		save_settings()
 
 # === VOLUME API ===
+
+func set_leaderboard_tab(tab: String) -> void:
+	leaderboard_tab = tab
+	save_settings()
 
 func set_sfx_volume(v: float) -> void:
 	sfx_volume = clampf(v, 0.0, 1.0)
@@ -64,6 +73,7 @@ func save_settings() -> void:
 	config.set_value("stats", "high_score", high_score)
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("audio", "master_volume", master_volume)
+	config.set_value("ui", "leaderboard_tab", leaderboard_tab)
 	config.save(SAVE_PATH)
 
 func load_settings() -> void:
@@ -74,6 +84,7 @@ func load_settings() -> void:
 		high_score = config.get_value("stats", "high_score", 0)
 		sfx_volume = config.get_value("audio", "sfx_volume", 1.0)
 		master_volume = config.get_value("audio", "master_volume", 1.0)
+		leaderboard_tab = config.get_value("ui", "leaderboard_tab", "elo")
 
 	# Push saved volumes to SoundManager (it's loaded before us as autoload)
 	_apply_volume.call_deferred()

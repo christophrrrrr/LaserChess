@@ -8,9 +8,20 @@ var profile_popup: Control
 var loading_label: Label
 var back_button_layer: CanvasLayer
 
+var _all_players: Array = []
+var _active_tab: String = "elo"
+var _elo_tab_btn: Button
+var _solo_tab_btn: Button
+
 func _ready() -> void:
 	_setup_ui()
 	_setup_back_button()
+
+	# Restore the previously selected tab
+	_active_tab = GameSettings.leaderboard_tab
+	_style_tab_button(_elo_tab_btn, _active_tab == "elo")
+	_style_tab_button(_solo_tab_btn, _active_tab == "solo")
+
 	PlayerData.leaderboard_loaded.connect(_on_leaderboard_loaded)
 	PlayerData.player_profile_loaded.connect(_on_profile_loaded)
 	PlayerData.load_leaderboard()
@@ -52,14 +63,32 @@ func _setup_ui() -> void:
 	esc.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 	hud.add_child(esc)
 
+	# Tab buttons — built now, added to hud AFTER scroll_wrap so they sit on top for input
+	var tab_row = HBoxContainer.new()
+	tab_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	tab_row.position = Vector2(-114, 68)
+	tab_row.custom_minimum_size = Vector2(228, 36)
+	tab_row.add_theme_constant_override("separation", 8)
+
+	_elo_tab_btn = _create_tab_button("ELO RANKING", true)
+	_elo_tab_btn.pressed.connect(_on_tab_elo)
+	tab_row.add_child(_elo_tab_btn)
+
+	_solo_tab_btn = _create_tab_button("SOLO SCORES", false)
+	_solo_tab_btn.pressed.connect(_on_tab_solo)
+	tab_row.add_child(_solo_tab_btn)
+
 	# Scroll container for the list
 	var scroll_wrap = MarginContainer.new()
 	scroll_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll_wrap.add_theme_constant_override("margin_top", 75)
+	scroll_wrap.add_theme_constant_override("margin_top", 115)
 	scroll_wrap.add_theme_constant_override("margin_bottom", 50)
 	scroll_wrap.add_theme_constant_override("margin_left", 40)
 	scroll_wrap.add_theme_constant_override("margin_right", 40)
 	hud.add_child(scroll_wrap)
+
+	# Add tab_row last so it is the top-most sibling and receives mouse input before scroll_wrap
+	hud.add_child(tab_row)
 
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -105,11 +134,15 @@ func _setup_profile_popup() -> void:
 # =====================
 
 func _on_leaderboard_loaded(players: Array) -> void:
+	_all_players = players
+	_display_players()
+
+func _display_players() -> void:
 	for child in scroll_content.get_children():
 		scroll_content.remove_child(child)
 		child.queue_free()
 
-	if players.is_empty():
+	if _all_players.is_empty():
 		var empty_lbl = Label.new()
 		empty_lbl.text = "No players yet.\nPlay a ranked match to appear here!"
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -118,21 +151,79 @@ func _on_leaderboard_loaded(players: Array) -> void:
 		scroll_content.add_child(empty_lbl)
 		return
 
-	# Header row using HBoxContainer for alignment
-	var header = _create_row_hbox("#", "Name", "ELO", "Record", Color(0.45, 0.45, 0.55), 14, false, "")
-	scroll_content.add_child(header)
+	var sorted := _all_players.duplicate()
 
+	if _active_tab == "elo":
+		sorted.sort_custom(func(a, b): return a.get("elo", 0) > b.get("elo", 0))
+		var header = _create_row_hbox("#", "Name", "ELO", "Record", Color(0.45, 0.45, 0.55), 14, false, "")
+		scroll_content.add_child(header)
+		scroll_content.add_child(_make_sep())
+		for i in sorted.size():
+			var p = sorted[i]
+			var is_me = (p.get("player_id", "") == PlayerData.player_id)
+			scroll_content.add_child(_create_player_row(i + 1, p, is_me))
+	else:
+		sorted.sort_custom(func(a, b): return a.get("solo_highscore", 0) > b.get("solo_highscore", 0))
+		var header = _create_solo_row_hbox("#", "Name", "Best Score", Color(0.45, 0.45, 0.55), 14)
+		scroll_content.add_child(header)
+		scroll_content.add_child(_make_sep())
+		for i in sorted.size():
+			var p = sorted[i]
+			var is_me = (p.get("player_id", "") == PlayerData.player_id)
+			scroll_content.add_child(_create_solo_player_row(i + 1, p, is_me))
+
+func _make_sep() -> HSeparator:
 	var sep = HSeparator.new()
 	sep.add_theme_constant_override("separation", 4)
-	scroll_content.add_child(sep)
+	return sep
 
-	# Player rows
-	for i in players.size():
-		var p = players[i]
-		var rank = i + 1
-		var is_me = (p.get("player_id", "") == PlayerData.player_id)
-		var row = _create_player_row(rank, p, is_me)
-		scroll_content.add_child(row)
+func _on_tab_elo() -> void:
+	if _active_tab == "elo":
+		return
+	_active_tab = "elo"
+	GameSettings.set_leaderboard_tab("elo")
+	_style_tab_button(_elo_tab_btn, true)
+	_style_tab_button(_solo_tab_btn, false)
+	_display_players()
+
+func _on_tab_solo() -> void:
+	if _active_tab == "solo":
+		return
+	_active_tab = "solo"
+	GameSettings.set_leaderboard_tab("solo")
+	_style_tab_button(_elo_tab_btn, false)
+	_style_tab_button(_solo_tab_btn, true)
+	_display_players()
+
+func _create_tab_button(label: String, is_active: bool) -> Button:
+	var btn = Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(110, 34)
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_style_tab_button(btn, is_active)
+	return btn
+
+func _style_tab_button(btn: Button, is_active: bool) -> void:
+	var s = StyleBoxFlat.new()
+	s.set_corner_radius_all(6)
+	s.set_content_margin_all(4)
+	if is_active:
+		s.bg_color = Color(0.12, 0.28, 0.14)
+		s.border_color = Color(0.45, 0.9, 0.55)
+		s.set_border_width_all(2)
+		btn.add_theme_color_override("font_color", Color(0.6, 1.0, 0.7))
+	else:
+		s.bg_color = Color(0.1, 0.1, 0.15)
+		s.border_color = Color(0.28, 0.28, 0.38)
+		s.set_border_width_all(1)
+		btn.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
+	btn.add_theme_stylebox_override("normal", s)
+	var hover = s.duplicate() as StyleBoxFlat
+	hover.bg_color = s.bg_color.lightened(0.08)
+	hover.border_color = s.border_color.lightened(0.15)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
 
 func _create_row_hbox(rank_text: String, name_text: String, elo_text: String,
 		record_text: String, text_color: Color, font_size: int,
@@ -276,6 +367,117 @@ func _create_player_row(rank: int, data: Dictionary, is_me: bool) -> Button:
 	record_lbl.add_theme_color_override("font_color", text_color.darkened(0.15))
 	record_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(record_lbl)
+
+	btn.pressed.connect(_on_leaderboard_player_clicked.bind(pid, name_str))
+	return btn
+
+func _create_solo_row_hbox(rank_text: String, name_text: String, score_text: String,
+		text_color: Color, font_size: int) -> Control:
+	var hbox = HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 0)
+	hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var rank_lbl = Label.new()
+	rank_lbl.text = rank_text
+	rank_lbl.custom_minimum_size = Vector2(50, 0)
+	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank_lbl.add_theme_font_size_override("font_size", font_size)
+	rank_lbl.add_theme_color_override("font_color", text_color)
+	hbox.add_child(rank_lbl)
+
+	var name_lbl = Label.new()
+	name_lbl.text = name_text
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.add_theme_font_size_override("font_size", font_size)
+	name_lbl.add_theme_color_override("font_color", text_color)
+	hbox.add_child(name_lbl)
+
+	var score_lbl = Label.new()
+	score_lbl.text = score_text
+	score_lbl.custom_minimum_size = Vector2(120, 0)
+	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_lbl.add_theme_font_size_override("font_size", font_size)
+	score_lbl.add_theme_color_override("font_color", text_color)
+	hbox.add_child(score_lbl)
+
+	return hbox
+
+func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button:
+	var name_str := data.get("name", "???") as String
+	var score_val := data.get("solo_highscore", 0) as int
+	var pid := data.get("player_id", "") as String
+
+	var btn = Button.new()
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 36)
+
+	var base_color := Color(0.1, 0.15, 0.1) if is_me else Color(0.08, 0.08, 0.12)
+	var text_color := Color(0.5, 1.0, 0.6) if is_me else Color(0.85, 0.85, 0.9)
+
+	var accent := Color(0.25, 0.25, 0.35)
+	if rank == 1:
+		accent = Color(0.85, 0.65, 0.1)
+		if not is_me:
+			text_color = Color(1.0, 0.9, 0.5)
+	elif rank == 2:
+		accent = Color(0.6, 0.6, 0.7)
+	elif rank == 3:
+		accent = Color(0.7, 0.45, 0.2)
+
+	var normal = StyleBoxFlat.new()
+	normal.bg_color = base_color
+	normal.set_corner_radius_all(4)
+	normal.border_color = accent
+	normal.border_width_left = 3 if rank <= 3 else 0
+	normal.set_content_margin_all(0)
+	normal.content_margin_top = 2
+	normal.content_margin_bottom = 2
+	btn.add_theme_stylebox_override("normal", normal)
+
+	var hover = normal.duplicate() as StyleBoxFlat
+	hover.bg_color = base_color.lightened(0.1)
+	hover.border_color = Color(0.85, 0.55, 0.1)
+	hover.set_border_width_all(1)
+	hover.border_width_left = 3
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.text = ""
+
+	var hbox = HBoxContainer.new()
+	hbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hbox.add_theme_constant_override("separation", 0)
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(hbox)
+
+	var rank_lbl = Label.new()
+	rank_lbl.text = "#" + str(rank)
+	rank_lbl.custom_minimum_size = Vector2(50, 0)
+	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	rank_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	rank_lbl.add_theme_font_size_override("font_size", 16)
+	rank_lbl.add_theme_color_override("font_color", text_color)
+	rank_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(rank_lbl)
+
+	var name_lbl = Label.new()
+	name_lbl.text = name_str
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 16)
+	name_lbl.add_theme_color_override("font_color", text_color)
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(name_lbl)
+
+	var score_lbl = Label.new()
+	score_lbl.text = str(score_val) if score_val > 0 else "—"
+	score_lbl.custom_minimum_size = Vector2(120, 0)
+	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	score_lbl.add_theme_font_size_override("font_size", 16)
+	score_lbl.add_theme_color_override("font_color", text_color)
+	score_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(score_lbl)
 
 	btn.pressed.connect(_on_leaderboard_player_clicked.bind(pid, name_str))
 	return btn

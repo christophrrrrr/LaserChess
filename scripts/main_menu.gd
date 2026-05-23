@@ -31,6 +31,9 @@ var player_preview_instance: Node2D  # Player scene instance for preview
 
 # Leaderboard
 var lb_content: VBoxContainer
+var _lb_players: Array = []
+var _lb_elo_btn: Button
+var _lb_solo_btn: Button
 
 # Shop
 var shop_content: VBoxContainer
@@ -155,6 +158,30 @@ func _build_left_panel() -> PanelContainer:
 	accent_line.color = Color(0.95, 0.8, 0.25, 0.6)
 	accent_line.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	title_container.add_child(accent_line)
+
+	# Mini tab chips
+	var mini_tab_row = HBoxContainer.new()
+	mini_tab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mini_tab_row.add_theme_constant_override("separation", 6)
+	title_container.add_child(mini_tab_row)
+
+	_lb_elo_btn = _create_mini_tab("ELO", GameSettings.leaderboard_tab == "elo")
+	_lb_elo_btn.pressed.connect(func():
+		GameSettings.set_leaderboard_tab("elo")
+		_style_mini_tab(_lb_elo_btn, true)
+		_style_mini_tab(_lb_solo_btn, false)
+		_render_mini_leaderboard()
+	)
+	mini_tab_row.add_child(_lb_elo_btn)
+
+	_lb_solo_btn = _create_mini_tab("SOLO", GameSettings.leaderboard_tab == "solo")
+	_lb_solo_btn.pressed.connect(func():
+		GameSettings.set_leaderboard_tab("solo")
+		_style_mini_tab(_lb_elo_btn, false)
+		_style_mini_tab(_lb_solo_btn, true)
+		_render_mini_leaderboard()
+	)
+	mini_tab_row.add_child(_lb_solo_btn)
 
 	_add_spacer(vbox, 24)
 
@@ -562,11 +589,15 @@ func _load_mini_leaderboard() -> void:
 	PlayerData.load_leaderboard()
 
 func _on_lb_loaded(players: Array) -> void:
+	_lb_players = players
+	_render_mini_leaderboard()
+
+func _render_mini_leaderboard() -> void:
 	for c in lb_content.get_children():
 		lb_content.remove_child(c)
 		c.queue_free()
 
-	if players.is_empty():
+	if _lb_players.is_empty():
 		var empty = Label.new()
 		empty.text = "No players yet"
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -575,13 +606,21 @@ func _on_lb_loaded(players: Array) -> void:
 		lb_content.add_child(empty)
 		return
 
-	var count = mini(players.size(), 10)
+	var sorted := _lb_players.duplicate()
+	var tab := GameSettings.leaderboard_tab
+
+	if tab == "solo":
+		sorted.sort_custom(func(a, b): return a.get("solo_highscore", 0) > b.get("solo_highscore", 0))
+	else:
+		sorted.sort_custom(func(a, b): return a.get("elo", 0) > b.get("elo", 0))
+
+	var count := mini(sorted.size(), 10)
 	for i in count:
-		var p = players[i]
-		var pname = p.get("name", "???")
-		var elo = p.get("elo", 0)
-		var is_me = p.get("player_id", "") == PlayerData.player_id
-		lb_content.add_child(_create_lb_row(i + 1, pname, elo, is_me))
+		var p: Dictionary = sorted[i]
+		var pname := p.get("name", "???") as String
+		var val: int = p.get("solo_highscore", 0) if tab == "solo" else p.get("elo", 0)
+		var is_me: bool = p.get("player_id", "") == PlayerData.player_id
+		lb_content.add_child(_create_lb_row(i + 1, pname, val, is_me))
 
 func _create_lb_row(rank: int, pname: String, elo: int, is_me: bool) -> PanelContainer:
 	var panel = PanelContainer.new()
@@ -1089,6 +1128,35 @@ func _add_spacer(parent: Control, height: float) -> void:
 	var spacer = Control.new()
 	spacer.custom_minimum_size = Vector2(0, height)
 	parent.add_child(spacer)
+
+func _create_mini_tab(label: String, is_active: bool) -> Button:
+	var btn = Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(68, 22)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_style_mini_tab(btn, is_active)
+	return btn
+
+func _style_mini_tab(btn: Button, is_active: bool) -> void:
+	var s = StyleBoxFlat.new()
+	s.set_corner_radius_all(4)
+	s.set_content_margin_all(3)
+	if is_active:
+		s.bg_color = Color(0.12, 0.24, 0.14, 0.7)
+		s.border_color = Color(0.45, 0.8, 0.5, 0.9)
+		s.set_border_width_all(1)
+		btn.add_theme_color_override("font_color", Color(0.55, 0.95, 0.6))
+	else:
+		s.bg_color = Color(0.07, 0.07, 0.11, 0.5)
+		s.border_color = Color(0.22, 0.22, 0.3, 0.5)
+		s.set_border_width_all(1)
+		btn.add_theme_color_override("font_color", Color(0.32, 0.33, 0.42))
+	btn.add_theme_stylebox_override("normal", s)
+	var hover := s.duplicate() as StyleBoxFlat
+	hover.bg_color = s.bg_color.lightened(0.08)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
 
 func _update_color_label() -> void:
 	color_label.text = "WHITE" if GameSettings.player_is_white else "BLACK"

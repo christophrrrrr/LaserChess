@@ -17,6 +17,7 @@ signal opponent_score_updated(best_score: int)
 signal match_result_received(result: String, my_score: int, opp_score: int, elo_change: int, opp_name: String, opp_elo: int, opp_player_id: String)
 signal opponent_disconnected_sig(elo_change: int, my_score: int, opp_score: int, opp_name: String, opp_elo: int, opp_player_id: String)
 signal challenge_failed(msg: String)
+signal opponent_ghost_updated(x: int, y: int)
 
 # === STATE ===
 var _socket: WebSocketPeer = null
@@ -94,6 +95,9 @@ func send_score(best_score: int) -> void:
 func send_match_end(best_score: int) -> void:
 	_send({"type": "match_end", "best_score": best_score})
 
+func send_ghost_pos(x: int, y: int) -> void:
+	_send({"type": "ghost_pos", "x": x, "y": y})
+
 func rejoin_lobby() -> void:
 	_send({
 		"type": "rejoin_lobby",
@@ -164,3 +168,5 @@ func _handle_message(text: String) -> void:
 			)
 		"challenge_failed":
 			challenge_failed.emit(data.get("msg", "Player unavailable"))
+		"opponent_ghost":
+			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))

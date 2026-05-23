@@ -23,6 +23,12 @@ var my_best_score: int = 0
 var opponent_best_score: int = 0
 var last_elo_change: int = 0
 
+# === SPECTATE / GHOST ===
+const RESPAWN_TIMEOUT := 10.0
+var _ghost_sprite: Sprite2D = null
+var _ghost_slide_tween: Tween = null
+var _is_spectating: bool = false
+
 # === HUD LAYER ===
 @onready var timer_label: Label             = $MatchHUD/TimerLabel
 @onready var my_panel: PanelContainer       = $MatchHUD/MyPanel
@@ -39,6 +45,9 @@ var last_elo_change: int = 0
 
 # === RESULTS ===
 @onready var result_container: Control      = $MatchHUD/ResultContainer
+
+# === SPECTATE ===
+@onready var spectate_label: Label          = $MatchHUD/SpectateLabel
 
 # === BACK BUTTON (Mobile) ===
 @onready var back_button: Button            = $BackButtonLayer/BackButtonRoot/BackButton
@@ -81,6 +90,8 @@ func _connect_signals() -> void:
 	NetworkManager.match_result_received.connect(_on_match_result)
 	NetworkManager.opponent_disconnected_sig.connect(_on_opponent_disconnected)
 	NetworkManager.challenge_failed.connect(_on_challenge_failed)
+	player.position_changed.connect(_on_player_moved)
+	NetworkManager.opponent_ghost_updated.connect(_on_opponent_ghost_updated)
 
 # =====================
 # NETWORK CALLBACKS
@@ -113,16 +124,25 @@ func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: S
 	opponent_name = opp_name
 	opponent_elo = opp_elo
 	opponent_player_id = opp_pid
-	opp_name_label.text = opp_name + " (" + str(opp_elo) + ")"
+	opp_name_label.text = opp_name + " · " + str(opp_elo)
 	_start_countdown()
 
 func _on_opponent_score(best_score: int) -> void:
-	if best_score > opponent_best_score:
-		opponent_best_score = best_score
-		opponent_score_label.text = str(opponent_best_score)
-		var tween = create_tween()
-		tween.tween_property(opponent_score_label, "scale", Vector2(1.3, 1.3), 0.05)
-		tween.tween_property(opponent_score_label, "scale", Vector2.ONE, 0.1).set_trans(Tween.TRANS_BACK)
+	if best_score <= opponent_best_score:
+		return
+	opponent_best_score = best_score
+	opponent_score_label.text = str(opponent_best_score)
+
+	# Flash the ghost bright orange when opponent scores
+	if _ghost_sprite and is_instance_valid(_ghost_sprite):
+		var ghost_flash := create_tween()
+		ghost_flash.tween_property(_ghost_sprite, "modulate", Color(1.0, 0.6, 0.1, 0.9), 0.07)
+		ghost_flash.tween_property(_ghost_sprite, "modulate", Color(0.45, 0.75, 1.0, 0.38), 0.35)
+
+	# Score label: big pop, bounce back
+	var tween := create_tween()
+	tween.tween_property(opponent_score_label, "scale", Vector2(1.6, 1.6), 0.07)
+	tween.tween_property(opponent_score_label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK)
 
 func _on_match_result(result: String, my_score: int, opp_score: int,
 		elo_change: int, opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
@@ -416,6 +436,7 @@ func _start_match() -> void:
 	player.is_moving = false
 	hazard_spawner.is_active = true
 	hazard_spawner.spawn_timer.start(hazard_spawner.initial_delay)
+	_create_ghost()
 
 # =====================
 # GAME LOOP
@@ -451,16 +472,31 @@ func _on_my_score_changed(new_score: int) -> void:
 func _on_player_died_ranked() -> void:
 	if current_state != State.PLAYING:
 		return
-	await get_tree().create_timer(1.0).timeout
-	if not is_inside_tree() or current_state != State.PLAYING:
-		return
+	_is_spectating = true
+	spectate_label.visible = true
+
+	# Count down second by second — board + ghost stay active so player can watch
+	var seconds_left := int(RESPAWN_TIMEOUT)
+	while seconds_left > 0:
+		spectate_label.text = "Respawning in " + str(seconds_left) + "s..."
+		await get_tree().create_timer(1.0).timeout
+		if not is_inside_tree() or current_state != State.PLAYING:
+			spectate_label.visible = false
+			_is_spectating = false
+			return
+		seconds_left -= 1
+
+	spectate_label.visible = false
+	_is_spectating = false
+
+	# Respawn — score is NOT reset (10 s wait is the punishment)
 	player.reset()
 	game_board.reset()
 	hazard_spawner.reset()
-	var flash = create_tween()
-	flash.set_loops(3)
-	flash.tween_property(player, "modulate:a", 0.3, 0.1)
-	flash.tween_property(player, "modulate:a", 1.0, 0.1)
+
+	player.modulate.a = 0.0
+	var flash := create_tween()
+	flash.tween_property(player, "modulate:a", 1.0, 0.4)
 
 # =====================
 # MATCH END
@@ -471,6 +507,9 @@ func _end_match() -> void:
 	hazard_spawner.is_active = false
 	hazard_spawner.spawn_timer.stop()
 	player.is_dead = true
+	if _ghost_sprite and is_instance_valid(_ghost_sprite):
+		_ghost_sprite.queue_free()
+		_ghost_sprite = null
 	NetworkManager.send_match_end(my_best_score)
 	# Results will be shown when _on_match_result is called by the server
 
@@ -674,6 +713,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_back_to_lobby()
 
 func _back_to_lobby() -> void:
+	if _ghost_sprite and is_instance_valid(_ghost_sprite):
+		_ghost_sprite.queue_free()
+		_ghost_sprite = null
 	result_container.visible = false
 
 	my_best_score = 0
@@ -697,6 +739,50 @@ func _back_to_lobby() -> void:
 	else:
 		_show_connecting()
 		NetworkManager.connect_to_server()
+
+# =====================
+# GHOST PLAYER
+# =====================
+
+func _create_ghost() -> void:
+	if _ghost_sprite and is_instance_valid(_ghost_sprite):
+		_ghost_sprite.queue_free()
+
+	# Opponent uses the opposite king texture
+	var opp_tex_path: String = "res://assets/king1.png" if GameSettings.player_is_white else "res://assets/king.png"
+	var opp_tex: Texture2D = load(opp_tex_path)
+
+	_ghost_sprite = Sprite2D.new()
+	_ghost_sprite.texture = opp_tex
+
+	var tex_size := opp_tex.get_size()
+	var tile_size: float = game_board.tile_size
+	var target_size := tile_size * 0.8
+	var scale_factor: float = target_size / max(tex_size.x, tex_size.y)
+	_ghost_sprite.scale = Vector2(scale_factor, scale_factor)
+	_ghost_sprite.modulate = Color(0.45, 0.75, 1.0, 0.38)  # cyan-blue, semi-transparent
+
+	# Start at board center (will move when first ghost_pos arrives)
+	_ghost_sprite.position = game_board.grid_to_world(Vector2i(game_board.grid_size / 2, game_board.grid_size / 2))
+
+	# Insert BEFORE the player node so it renders behind the player at the same z_index
+	add_child(_ghost_sprite)
+	move_child(_ghost_sprite, player.get_index())
+
+func _on_player_moved(new_pos: Vector2i) -> void:
+	if current_state != State.PLAYING:
+		return
+	NetworkManager.send_ghost_pos(new_pos.x, new_pos.y)
+
+func _on_opponent_ghost_updated(x: int, y: int) -> void:
+	if not (_ghost_sprite and is_instance_valid(_ghost_sprite)):
+		return
+	var target_pos: Vector2 = game_board.grid_to_world(Vector2i(x, y))
+	if _ghost_slide_tween and _ghost_slide_tween.is_valid():
+		_ghost_slide_tween.kill()
+	_ghost_slide_tween = create_tween()
+	_ghost_slide_tween.tween_property(_ghost_sprite, "position", target_pos, 0.12) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 # =====================
 # HELPERS

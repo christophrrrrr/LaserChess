@@ -1,6 +1,7 @@
 extends Node2D
 
 signal died
+signal position_changed(new_pos: Vector2i)
 
 @export var move_duration: float = 0.08
 @export var hat_offset: Vector2 = Vector2(1, 2)
@@ -303,6 +304,7 @@ func _try_move(direction: Vector2i) -> void:
 		return
 
 	grid_pos = new_pos
+	position_changed.emit(grid_pos)
 	_do_move_animation()
 	SoundManager.play_pitched("move", 0.9, 1.1)
 
