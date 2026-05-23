@@ -9,22 +9,31 @@ var loading_label: Label
 var back_button_layer: CanvasLayer
 
 var _all_players: Array = []
-var _active_tab: String = "elo"
+var _active_tab: String = "solo"
+var _active_elo_mode: String = "bullet"
 var _elo_tab_btn: Button
 var _solo_tab_btn: Button
+var _elo_mode_row: HBoxContainer
+var _bullet_btn: Button
+var _blitz_btn: Button
+var _rapid_btn: Button
 
 func _ready() -> void:
 	_setup_ui()
 	_setup_back_button()
 
-	# Restore the previously selected tab
+	# Restore the previously selected tab and ELO sub-mode
 	_active_tab = GameSettings.leaderboard_tab
+	_active_elo_mode = GameSettings.leaderboard_elo_mode
 	_style_tab_button(_elo_tab_btn, _active_tab == "elo")
 	_style_tab_button(_solo_tab_btn, _active_tab == "solo")
+	_elo_mode_row.visible = (_active_tab == "elo")
+	_update_elo_mode_buttons()
 
 	PlayerData.leaderboard_loaded.connect(_on_leaderboard_loaded)
 	PlayerData.player_profile_loaded.connect(_on_profile_loaded)
-	PlayerData.load_leaderboard()
+	var sort_field = "elo_" + _active_elo_mode if _active_tab == "elo" else "solo_highscore"
+	PlayerData.load_leaderboard(sort_field)
 
 # =====================
 # UI SETUP
@@ -63,20 +72,40 @@ func _setup_ui() -> void:
 	esc.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 	hud.add_child(esc)
 
-	# Tab buttons — built now, added to hud AFTER scroll_wrap so they sit on top for input
+	# Tab buttons (Solo first = default)
 	var tab_row = HBoxContainer.new()
 	tab_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	tab_row.position = Vector2(-114, 68)
 	tab_row.custom_minimum_size = Vector2(228, 36)
 	tab_row.add_theme_constant_override("separation", 8)
 
-	_elo_tab_btn = _create_tab_button("ELO RANKING", true)
+	_solo_tab_btn = _create_tab_button("SOLO SCORES", true)
+	_solo_tab_btn.pressed.connect(_on_tab_solo)
+	tab_row.add_child(_solo_tab_btn)
+
+	_elo_tab_btn = _create_tab_button("ELO RANKING", false)
 	_elo_tab_btn.pressed.connect(_on_tab_elo)
 	tab_row.add_child(_elo_tab_btn)
 
-	_solo_tab_btn = _create_tab_button("SOLO SCORES", false)
-	_solo_tab_btn.pressed.connect(_on_tab_solo)
-	tab_row.add_child(_solo_tab_btn)
+	# ELO sub-mode row (Bullet / Blitz / Rapid chips)
+	_elo_mode_row = HBoxContainer.new()
+	_elo_mode_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_elo_mode_row.position = Vector2(-120, 112)
+	_elo_mode_row.custom_minimum_size = Vector2(240, 30)
+	_elo_mode_row.add_theme_constant_override("separation", 8)
+	_elo_mode_row.visible = false
+
+	_bullet_btn = _create_elo_mode_button("🔫 BULLET")
+	_bullet_btn.pressed.connect(_on_elo_mode.bind("bullet"))
+	_elo_mode_row.add_child(_bullet_btn)
+
+	_blitz_btn = _create_elo_mode_button("⚡ BLITZ")
+	_blitz_btn.pressed.connect(_on_elo_mode.bind("blitz"))
+	_elo_mode_row.add_child(_blitz_btn)
+
+	_rapid_btn = _create_elo_mode_button("⏱ RAPID")
+	_rapid_btn.pressed.connect(_on_elo_mode.bind("rapid"))
+	_elo_mode_row.add_child(_rapid_btn)
 
 	# Scroll container for the list
 	var scroll_wrap = MarginContainer.new()
@@ -87,8 +116,9 @@ func _setup_ui() -> void:
 	scroll_wrap.add_theme_constant_override("margin_right", 40)
 	hud.add_child(scroll_wrap)
 
-	# Add tab_row last so it is the top-most sibling and receives mouse input before scroll_wrap
+	# Add rows last so they sit on top for input
 	hud.add_child(tab_row)
+	hud.add_child(_elo_mode_row)
 
 	var scroll = ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -152,16 +182,18 @@ func _display_players() -> void:
 		return
 
 	var sorted := _all_players.duplicate()
+	var elo_field := "elo_" + _active_elo_mode
 
 	if _active_tab == "elo":
-		sorted.sort_custom(func(a, b): return a.get("elo", 0) > b.get("elo", 0))
-		var header = _create_row_hbox("#", "Name", "ELO", "Record", Color(0.45, 0.45, 0.55), 14, false, "")
+		sorted.sort_custom(func(a, b): return a.get(elo_field, 0) > b.get(elo_field, 0))
+		var mode_label = _active_elo_mode.to_upper() + " ELO"
+		var header = _create_row_hbox("#", "Name", mode_label, "Record", Color(0.45, 0.45, 0.55), 14, false, "")
 		scroll_content.add_child(header)
 		scroll_content.add_child(_make_sep())
 		for i in sorted.size():
 			var p = sorted[i]
 			var is_me = (p.get("player_id", "") == PlayerData.player_id)
-			scroll_content.add_child(_create_player_row(i + 1, p, is_me))
+			scroll_content.add_child(_create_player_row(i + 1, p, is_me, elo_field))
 	else:
 		sorted.sort_custom(func(a, b): return a.get("solo_highscore", 0) > b.get("solo_highscore", 0))
 		var header = _create_solo_row_hbox("#", "Name", "Best Score", Color(0.45, 0.45, 0.55), 14)
@@ -184,7 +216,8 @@ func _on_tab_elo() -> void:
 	GameSettings.set_leaderboard_tab("elo")
 	_style_tab_button(_elo_tab_btn, true)
 	_style_tab_button(_solo_tab_btn, false)
-	_display_players()
+	_elo_mode_row.visible = true
+	PlayerData.load_leaderboard("elo_" + _active_elo_mode)
 
 func _on_tab_solo() -> void:
 	if _active_tab == "solo":
@@ -193,7 +226,50 @@ func _on_tab_solo() -> void:
 	GameSettings.set_leaderboard_tab("solo")
 	_style_tab_button(_elo_tab_btn, false)
 	_style_tab_button(_solo_tab_btn, true)
-	_display_players()
+	_elo_mode_row.visible = false
+	PlayerData.load_leaderboard("solo_highscore")
+
+func _on_elo_mode(mode: String) -> void:
+	if _active_elo_mode == mode:
+		return
+	_active_elo_mode = mode
+	GameSettings.set_leaderboard_elo_mode(mode)
+	_update_elo_mode_buttons()
+	PlayerData.load_leaderboard("elo_" + mode)
+
+func _update_elo_mode_buttons() -> void:
+	_style_elo_mode_button(_bullet_btn, _active_elo_mode == "bullet")
+	_style_elo_mode_button(_blitz_btn,  _active_elo_mode == "blitz")
+	_style_elo_mode_button(_rapid_btn,  _active_elo_mode == "rapid")
+
+func _create_elo_mode_button(label: String) -> Button:
+	var btn = Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(76, 28)
+	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_style_elo_mode_button(btn, false)
+	return btn
+
+func _style_elo_mode_button(btn: Button, is_active: bool) -> void:
+	var s = StyleBoxFlat.new()
+	s.set_corner_radius_all(5)
+	s.set_content_margin_all(3)
+	if is_active:
+		s.bg_color = Color(0.12, 0.18, 0.32)
+		s.border_color = Color(0.3, 0.55, 1.0)
+		s.set_border_width_all(2)
+		btn.add_theme_color_override("font_color", Color(0.5, 0.8, 1.0))
+	else:
+		s.bg_color = Color(0.08, 0.08, 0.12)
+		s.border_color = Color(0.22, 0.22, 0.3)
+		s.set_border_width_all(1)
+		btn.add_theme_color_override("font_color", Color(0.38, 0.38, 0.48))
+	btn.add_theme_stylebox_override("normal", s)
+	var hover = s.duplicate() as StyleBoxFlat
+	hover.bg_color = s.bg_color.lightened(0.07)
+	btn.add_theme_stylebox_override("hover", hover)
+	btn.add_theme_stylebox_override("pressed", hover)
 
 func _create_tab_button(label: String, is_active: bool) -> Button:
 	var btn = Button.new()
@@ -269,9 +345,9 @@ func _create_row_hbox(rank_text: String, name_text: String, elo_text: String,
 
 	return hbox
 
-func _create_player_row(rank: int, data: Dictionary, is_me: bool) -> Button:
+func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: String = "elo_bullet") -> Button:
 	var name_str = data.get("name", "???")
-	var elo_val = data.get("elo", 1000)
+	var elo_val = data.get(elo_field, data.get("elo_bullet", data.get("elo", 1000)))
 	var w = data.get("wins", 0)
 	var l = data.get("losses", 0)
 	var d_val = data.get("draws", 0)
@@ -490,7 +566,9 @@ func _on_leaderboard_player_clicked(pid: String, pname: String) -> void:
 	if pid == PlayerData.player_id:
 		_show_profile({
 			"name": PlayerData.player_name,
-			"elo": PlayerData.elo,
+			"elo_bullet": PlayerData.elo_bullet,
+			"elo_blitz":  PlayerData.elo_blitz,
+			"elo_rapid":  PlayerData.elo_rapid,
 			"solo_highscore": PlayerData.solo_highscore,
 			"total_games": PlayerData.total_games,
 			"wins": PlayerData.wins,
@@ -559,7 +637,10 @@ func _show_profile(data: Dictionary) -> void:
 	_add_spacer(vbox, 12)
 
 	# Stats
-	var elo_val = data.get("elo", 1000)
+	var legacy_elo = data.get("elo", 1000)
+	var elo_b = data.get("elo_bullet", legacy_elo)
+	var elo_bl = data.get("elo_blitz",  1000)
+	var elo_r = data.get("elo_rapid",   1000)
 	var total = data.get("total_games", 0)
 	var w = data.get("wins", 0)
 	var l = data.get("losses", 0)
@@ -567,7 +648,9 @@ func _show_profile(data: Dictionary) -> void:
 	var hs = data.get("solo_highscore", 0)
 	var wr = ("%.0f" % (float(w) / float(total) * 100.0)) + "%" if total > 0 else "—"
 
-	_add_stat_line(vbox, "ELO", str(elo_val), Color(0.9, 0.9, 1.0))
+	_add_stat_line(vbox, "⚡ Bullet ELO", str(elo_b),  Color(0.95, 0.78, 0.1))
+	_add_stat_line(vbox, "🔥 Blitz ELO",  str(elo_bl), Color(0.2,  0.65, 1.0))
+	_add_stat_line(vbox, "♟ Rapid ELO",   str(elo_r),  Color(0.2,  0.9,  0.45))
 	_add_stat_line(vbox, "Solo Highscore", str(hs), Color(0.7, 0.7, 0.8))
 	_add_stat_line(vbox, "Matches", str(total) + "  (" + str(w) + "W / " + str(l) + "L / " + str(d) + "D)", Color(0.7, 0.7, 0.8))
 	_add_stat_line(vbox, "Win Rate", wr, Color(0.7, 0.7, 0.8))

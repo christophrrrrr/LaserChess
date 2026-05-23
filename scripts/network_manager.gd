@@ -11,12 +11,12 @@ var server_url: String = "wss://laserchess-webserver.onrender.com"
 signal connected_to_server()
 signal connection_failed()
 signal disconnected_from_server()
-signal lobby_updated(players: Array, total_online: int)
-signal match_started(seed_val: int, opponent_name: String, opponent_elo: int, opponent_player_id: String)
+signal queued(time_mode: String)
+signal queue_cancelled()
+signal match_started(seed_val: int, opponent_name: String, opponent_elo: int, opponent_player_id: String, time_mode: String)
 signal opponent_score_updated(best_score: int)
 signal match_result_received(result: String, my_score: int, opp_score: int, elo_change: int, opp_name: String, opp_elo: int, opp_player_id: String)
 signal opponent_disconnected_sig(elo_change: int, my_score: int, opp_score: int, opp_name: String, opp_elo: int, opp_player_id: String)
-signal challenge_failed(msg: String)
 signal opponent_ghost_updated(x: int, y: int)
 
 # === STATE ===
@@ -75,19 +75,19 @@ func disconnect_from_server() -> void:
 func is_online() -> bool:
 	return _was_connected and _socket != null
 
-func join_lobby() -> void:
+func queue_for_match(time_mode: String) -> void:
 	_send({
-		"type": "join_lobby",
+		"type": "queue_for_match",
+		"time_mode": time_mode,
 		"player_id": PlayerData.player_id,
 		"name": PlayerData.player_name,
-		"elo": PlayerData.elo
+		"elo_bullet": PlayerData.elo_bullet,
+		"elo_blitz":  PlayerData.elo_blitz,
+		"elo_rapid":  PlayerData.elo_rapid,
 	})
 
-func leave_lobby() -> void:
-	_send({"type": "leave_lobby"})
-
-func challenge_player(target_id: int) -> void:
-	_send({"type": "challenge", "target_id": target_id})
+func leave_queue() -> void:
+	_send({"type": "leave_queue"})
 
 func send_score(best_score: int) -> void:
 	_send({"type": "score_update", "best_score": best_score})
@@ -98,13 +98,6 @@ func send_match_end(best_score: int) -> void:
 func send_ghost_pos(x: int, y: int) -> void:
 	_send({"type": "ghost_pos", "x": x, "y": y})
 
-func rejoin_lobby() -> void:
-	_send({
-		"type": "rejoin_lobby",
-		"name": PlayerData.player_name,
-		"elo": PlayerData.elo
-	})
-
 ## Send updated player info to server (call after name/elo changes)
 func update_player_info() -> void:
 	if not is_online():
@@ -112,7 +105,9 @@ func update_player_info() -> void:
 	_send({
 		"type": "update_info",
 		"name": PlayerData.player_name,
-		"elo": PlayerData.elo
+		"elo_bullet": PlayerData.elo_bullet,
+		"elo_blitz":  PlayerData.elo_blitz,
+		"elo_rapid":  PlayerData.elo_rapid,
 	})
 
 # =====================
@@ -132,20 +127,23 @@ func _handle_message(text: String) -> void:
 		return
 
 	var msg_type = data.get("type", "")
-	if msg_type != "lobby_list" and msg_type != "opponent_score":
+	if msg_type != "opponent_score":
 		print("[NET] received: ", msg_type)
 	match msg_type:
 		"welcome":
 			session_id = data.get("session_id", -1)
 			connected_to_server.emit()
-		"lobby_list":
-			lobby_updated.emit(data.get("players", []), data.get("total_online", 0))
+		"queued":
+			queued.emit(data.get("time_mode", "bullet"))
+		"queue_cancelled":
+			queue_cancelled.emit()
 		"match_start":
 			match_started.emit(
 				data.get("seed", 0),
 				data.get("opponent", "???"),
 				data.get("opponent_elo", 1000),
-				data.get("opponent_player_id", "")
+				data.get("opponent_player_id", ""),
+				data.get("time_mode", "bullet")
 			)
 		"opponent_score":
 			opponent_score_updated.emit(data.get("best_score", 0))
@@ -168,8 +166,6 @@ func _handle_message(text: String) -> void:
 				data.get("opponent_elo", 1000),
 				data.get("opponent_player_id", "")
 			)
-		"challenge_failed":
-			challenge_failed.emit(data.get("msg", "Player unavailable"))
 		"opponent_ghost":
 			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))
 		"ghost_pos":

@@ -1,12 +1,16 @@
 extends Node2D
 
 # === MATCH SETTINGS ===
-@export var match_duration: float = 75.0
 @export var countdown_duration: int = 3
+
+const MODE_DURATIONS := {"bullet": 90.0, "blitz": 180.0, "rapid": 300.0}
+const MODE_LABELS    := {"bullet": "BULLET · 1:30", "blitz": "BLITZ · 3:00", "rapid": "RAPID · 5:00"}
 
 # === STATE ===
 enum State { CONNECTING, LOBBY, COUNTDOWN, PLAYING, RESULTS }
 var current_state: State = State.CONNECTING
+var _time_mode: String = "bullet"
+var match_duration: float = 90.0
 
 # === NODE REFERENCES ===
 var game_board: Node2D
@@ -28,6 +32,13 @@ const RESPAWN_TIMEOUT := 10.0
 var _ghost_sprite: Sprite2D = null
 var _ghost_slide_tween: Tween = null
 var _is_spectating: bool = false
+
+# === QUEUE ANIMATION ===
+var _queue_start_time: int = 0
+var _finding_label: Label = null
+var _elo_range_label: Label = null
+var _finding_dots_timer: float = 0.0
+var _finding_dots_count: int = 0
 
 # === HUD LAYER ===
 @onready var timer_label: Label             = $MatchHUD/TimerLabel
@@ -63,6 +74,9 @@ func _ready() -> void:
 	player = $Player
 	hazard_spawner = $HazardSpawner
 
+	_time_mode = GameSettings.ranked_time_mode
+	match_duration = MODE_DURATIONS.get(_time_mode, 90.0)
+
 	player.died.connect(_on_player_died_ranked)
 	game_board.score_changed.connect(_on_my_score_changed)
 
@@ -87,12 +101,10 @@ func _connect_signals() -> void:
 	NetworkManager.connected_to_server.connect(_on_connected)
 	NetworkManager.connection_failed.connect(_on_connection_failed)
 	NetworkManager.disconnected_from_server.connect(_on_disconnected)
-	NetworkManager.lobby_updated.connect(_on_lobby_updated)
 	NetworkManager.match_started.connect(_on_match_started)
 	NetworkManager.opponent_score_updated.connect(_on_opponent_score)
 	NetworkManager.match_result_received.connect(_on_match_result)
 	NetworkManager.opponent_disconnected_sig.connect(_on_opponent_disconnected)
-	NetworkManager.challenge_failed.connect(_on_challenge_failed)
 	player.position_changed.connect(_on_player_moved)
 	NetworkManager.opponent_ghost_updated.connect(_on_opponent_ghost_updated)
 
@@ -103,7 +115,8 @@ func _connect_signals() -> void:
 func _on_connected() -> void:
 	if PlayerData.player_name.is_empty():
 		PlayerData.player_name = "Player" + str(randi() % 1000)
-	NetworkManager.join_lobby()
+	NetworkManager.queue_for_match(_time_mode)
+	_show_finding_opponent()
 
 func _on_connection_failed() -> void:
 	_show_error("Could not connect to server.\nCheck your internet connection.")
@@ -118,15 +131,16 @@ func _on_disconnected() -> void:
 	elif current_state != State.RESULTS:
 		_show_error("Disconnected from server.")
 
-func _on_lobby_updated(players_list: Array, total_online: int) -> void:
-	if current_state == State.CONNECTING or current_state == State.LOBBY:
-		_show_lobby(players_list, total_online)
-
-func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: String) -> void:
+func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: String, time_mode: String) -> void:
+	_time_mode = time_mode
+	match_duration = MODE_DURATIONS.get(time_mode, 90.0)
+	match_time_remaining = match_duration
 	match_seed = seed_val
 	opponent_name = opp_name
 	opponent_elo = opp_elo
 	opponent_player_id = opp_pid
+	_finding_label = null
+	_elo_range_label = null
 	opp_name_label.text = opp_name + " · " + str(opp_elo)
 	_start_countdown()
 
@@ -150,7 +164,7 @@ func _on_opponent_score(best_score: int) -> void:
 func _on_match_result(result: String, my_score: int, opp_score: int,
 		elo_change: int, opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
 	if elo_change == 0:
-		last_elo_change = PlayerData.calculate_elo_change(PlayerData.elo, opp_elo_val, result)
+		last_elo_change = PlayerData.calculate_elo_change(PlayerData.get_elo_for_mode(_time_mode), opp_elo_val, result)
 	else:
 		last_elo_change = elo_change
 
@@ -159,26 +173,20 @@ func _on_match_result(result: String, my_score: int, opp_score: int,
 	opponent_player_id = opp_pid
 	my_best_score = my_score
 	opponent_best_score = opp_score
-	PlayerData.apply_match_result(result, my_score, opp_score, opp_name, opp_elo_val, elo_change)
+	PlayerData.apply_match_result(result, my_score, opp_score, opp_name, opp_elo_val, elo_change, _time_mode)
 	_show_results()
 
 func _on_opponent_disconnected(elo_change: int, my_score: int, opp_score: int,
 		opp_name: String, opp_elo_val: int, opp_pid: String) -> void:
 	if current_state == State.PLAYING or current_state == State.COUNTDOWN:
-		# Calculate ELO client-side if server returned 0
 		if elo_change == 0:
-			last_elo_change = PlayerData.calculate_elo_change(PlayerData.elo, opp_elo_val, "win")
+			last_elo_change = PlayerData.calculate_elo_change(PlayerData.get_elo_for_mode(_time_mode), opp_elo_val, "win")
 		else:
 			last_elo_change = elo_change
 		opponent_name = opp_name
 		opponent_elo = opp_elo_val
-		PlayerData.apply_match_result("win", my_score, opp_score, opp_name, opp_elo_val, elo_change)
+		PlayerData.apply_match_result("win", my_score, opp_score, opp_name, opp_elo_val, elo_change, _time_mode)
 		_show_disconnect_win()
-
-func _on_challenge_failed(msg: String) -> void:
-	if current_state != State.LOBBY:
-		return
-	_flash_error(msg)
 
 # =====================
 # STYLES
@@ -320,7 +328,7 @@ func _show_error(msg: String) -> void:
 	_add_spacer(lobby_content, 25)
 	_add_hint(lobby_content, "SPACE to retry  •  ESC to go back")
 
-func _show_lobby(players_list: Array, total_online: int) -> void:
+func _show_finding_opponent() -> void:
 	current_state = State.LOBBY
 	lobby_container.visible = true
 	result_container.visible = false
@@ -329,108 +337,51 @@ func _show_lobby(players_list: Array, total_online: int) -> void:
 
 	_clear_lobby()
 	_add_title()
-	_add_spacer(lobby_content, 6)
+	_add_spacer(lobby_content, 10)
 
-	# My identity line (no title, just name + ELO)
-	var my_info = Label.new()
-	my_info.text = PlayerData.player_name + "  •  " + str(PlayerData.elo) + " ELO"
-	my_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	my_info.add_theme_font_size_override("font_size", 15)
-	my_info.add_theme_color_override("font_color", Color(0.55, 0.75, 0.55))
-	lobby_content.add_child(my_info)
+	# Mode + ELO info
+	var mode_lbl = Label.new()
+	mode_lbl.text = MODE_LABELS.get(_time_mode, "BULLET · 1:30")
+	mode_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mode_lbl.add_theme_font_size_override("font_size", 22)
+	mode_lbl.add_theme_color_override("font_color", Color(0.85, 0.55, 0.1))
+	lobby_content.add_child(mode_lbl)
 
 	_add_spacer(lobby_content, 4)
 
-	var count_lbl = Label.new()
-	count_lbl.text = str(total_online) + " player" + ("s" if total_online != 1 else "") + " online"
-	count_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	count_lbl.add_theme_font_size_override("font_size", 14)
-	count_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
-	lobby_content.add_child(count_lbl)
+	var elo_lbl = Label.new()
+	elo_lbl.text = "Your ELO:  " + str(PlayerData.get_elo_for_mode(_time_mode))
+	elo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	elo_lbl.add_theme_font_size_override("font_size", 16)
+	elo_lbl.add_theme_color_override("font_color", Color(0.55, 0.75, 0.55))
+	lobby_content.add_child(elo_lbl)
 
-	_add_spacer(lobby_content, 16)
+	_add_spacer(lobby_content, 28)
 
-	# Filter out self using session_id (server-side ID)
-	var others: Array = []
-	for p in players_list:
-		if p.get("id", -1) != NetworkManager.session_id:
-			others.append(p)
+	# Animated "Finding opponent..." label
+	_finding_label = Label.new()
+	_finding_label.text = "Finding opponent..."
+	_finding_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_finding_label.add_theme_font_size_override("font_size", 26)
+	_finding_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.85))
+	lobby_content.add_child(_finding_label)
 
-	if others.is_empty():
-		var wait_lbl = Label.new()
-		wait_lbl.text = "Waiting for an opponent..."
-		wait_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		wait_lbl.add_theme_font_size_override("font_size", 22)
-		wait_lbl.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65))
-		lobby_content.add_child(wait_lbl)
-		_pulse(wait_lbl, 0.8)
-	else:
-		var hint = Label.new()
-		hint.text = "Click a player to challenge:"
-		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hint.add_theme_font_size_override("font_size", 16)
-		hint.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		lobby_content.add_child(hint)
-		_add_spacer(lobby_content, 10)
+	_add_spacer(lobby_content, 8)
 
-		for p in others:
-			var btn = _create_player_button(p.get("name", "???"), p.get("elo", 1000), p.get("id", -1))
-			lobby_content.add_child(btn)
-			_add_spacer(lobby_content, 6)
+	# ELO range label (updates in _process)
+	_elo_range_label = Label.new()
+	_elo_range_label.text = "Searching: ±100 ELO"
+	_elo_range_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_elo_range_label.add_theme_font_size_override("font_size", 15)
+	_elo_range_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+	lobby_content.add_child(_elo_range_label)
 
-	_add_spacer(lobby_content, 20)
+	_add_spacer(lobby_content, 28)
 	_add_hint(lobby_content, "ESC to go back")
 
-func _create_player_button(pname: String, pelo: int, pid: int) -> Button:
-	var btn = Button.new()
-	btn.text = "  " + pname + "  (" + str(pelo) + ")  "
-	btn.custom_minimum_size = Vector2(280, 44)
-
-	var normal = StyleBoxFlat.new()
-	normal.bg_color = Color(0.1, 0.1, 0.16)
-	normal.set_corner_radius_all(6)
-	normal.border_color = Color(0.25, 0.25, 0.35)
-	normal.set_border_width_all(1)
-	normal.set_content_margin_all(8)
-	btn.add_theme_stylebox_override("normal", normal)
-
-	var hover = StyleBoxFlat.new()
-	hover.bg_color = Color(0.16, 0.14, 0.22)
-	hover.set_corner_radius_all(6)
-	hover.border_color = Color(0.85, 0.55, 0.1)
-	hover.set_border_width_all(1)
-	hover.set_content_margin_all(8)
-	btn.add_theme_stylebox_override("hover", hover)
-
-	var pressed = StyleBoxFlat.new()
-	pressed.bg_color = Color(0.22, 0.18, 0.1)
-	pressed.set_corner_radius_all(6)
-	pressed.border_color = Color(0.85, 0.55, 0.1)
-	pressed.set_border_width_all(2)
-	pressed.set_content_margin_all(8)
-	btn.add_theme_stylebox_override("pressed", pressed)
-	btn.add_theme_stylebox_override("focus", hover.duplicate())
-
-	btn.add_theme_font_size_override("font_size", 20)
-	btn.add_theme_color_override("font_color", Color(0.9, 0.9, 0.95))
-	btn.add_theme_color_override("font_hover_color", Color(1.0, 0.85, 0.5))
-	btn.add_theme_color_override("font_pressed_color", Color(1.0, 0.7, 0.3))
-
-	btn.pressed.connect(_on_player_button_pressed.bind(pid))
-	return btn
-
-func _on_player_button_pressed(pid: int) -> void:
-	if current_state != State.LOBBY:
-		return
-	NetworkManager.challenge_player(pid)
-
-func _flash_error(msg: String) -> void:
-	error_flash.text = msg
-	error_flash.visible = true
-	error_flash.modulate.a = 1.0
-	var tween = create_tween()
-	tween.tween_property(error_flash, "modulate:a", 0.0, 1.2).set_delay(1.0)
-	tween.tween_callback(func(): error_flash.visible = false)
+	_queue_start_time = Time.get_ticks_msec()
+	_finding_dots_timer = 0.0
+	_finding_dots_count = 0
 
 # =====================
 # COUNTDOWN
@@ -480,6 +431,21 @@ func _start_match() -> void:
 # =====================
 
 func _process(delta: float) -> void:
+	# Animate queue search dots + ELO range label
+	if current_state == State.LOBBY:
+		_finding_dots_timer += delta
+		if _finding_dots_timer >= 0.45:
+			_finding_dots_timer = 0.0
+			_finding_dots_count += 1
+			var dots = ".".repeat((_finding_dots_count % 3) + 1)
+			if is_instance_valid(_finding_label):
+				_finding_label.text = "Finding opponent" + dots
+			if is_instance_valid(_elo_range_label):
+				var secs = float(Time.get_ticks_msec() - _queue_start_time) / 1000.0
+				var range_val = int(100 + 50 * (secs / 10.0))
+				_elo_range_label.text = "Searching: ±" + str(range_val) + " ELO"
+		return
+
 	if current_state != State.PLAYING:
 		return
 
@@ -607,7 +573,7 @@ func _show_results() -> void:
 
 	var elo_lbl = Label.new()
 	var elo_sign = "+" if last_elo_change >= 0 else ""
-	elo_lbl.text = elo_sign + str(last_elo_change) + " ELO  (" + str(PlayerData.elo) + ")"
+	elo_lbl.text = elo_sign + str(last_elo_change) + " ELO  (" + _time_mode.to_upper() + " " + str(PlayerData.get_elo_for_mode(_time_mode)) + ")"
 	elo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	elo_lbl.add_theme_font_size_override("font_size", 24)
 	if last_elo_change > 0:
@@ -671,7 +637,7 @@ func _show_disconnect_win() -> void:
 	_add_spacer(vbox, 12)
 
 	var elo_lbl = Label.new()
-	elo_lbl.text = "+" + str(last_elo_change) + " ELO  (" + str(PlayerData.elo) + ")"
+	elo_lbl.text = "+" + str(last_elo_change) + " ELO  (" + _time_mode.to_upper() + " " + str(PlayerData.get_elo_for_mode(_time_mode)) + ")"
 	elo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	elo_lbl.add_theme_font_size_override("font_size", 24)
 	elo_lbl.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
@@ -738,8 +704,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.keycode == KEY_ESCAPE:
 		SoundManager.play("click")
+		NetworkManager.leave_queue()
 		NetworkManager.disconnect_from_server()
-		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+		get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
 		return
 
 	if current_state == State.CONNECTING and not NetworkManager.is_online():
@@ -750,9 +717,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if current_state == State.RESULTS:
 		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-			_back_to_lobby()
+			_back_to_queue()
 
-func _back_to_lobby() -> void:
+func _back_to_queue() -> void:
 	if _ghost_sprite and is_instance_valid(_ghost_sprite):
 		_ghost_sprite.queue_free()
 		_ghost_sprite = null
@@ -774,8 +741,8 @@ func _back_to_lobby() -> void:
 	player.is_dead = true
 
 	if NetworkManager.is_online():
-		NetworkManager.rejoin_lobby()
-		current_state = State.CONNECTING
+		NetworkManager.queue_for_match(_time_mode)
+		_show_finding_opponent()
 	else:
 		_show_connecting()
 		NetworkManager.connect_to_server()
@@ -866,5 +833,6 @@ func _pulse(node: Control, duration: float = 0.6) -> void:
 
 func _on_back_button_pressed() -> void:
 	SoundManager.play("click")
+	NetworkManager.leave_queue()
 	NetworkManager.disconnect_from_server()
-	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	get_tree().change_scene_to_file("res://scenes/mode_select.tscn")

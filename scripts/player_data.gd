@@ -19,7 +19,9 @@ signal hat_changed(hat_id: String)
 # === PLAYER DATA ===
 var player_id: String = ""
 var player_name: String = ""
-var elo: int = 1000
+var elo_bullet: int = 1000
+var elo_blitz:  int = 1000
+var elo_rapid:  int = 1000
 var solo_highscore: int = 0
 var total_points: int = 0
 var purchased_hats: Array = []   # Array of hat_id strings
@@ -174,7 +176,10 @@ func _load_local() -> void:
 		var d = json.data
 		player_id = d.get("player_id", "")
 		player_name = d.get("name", "")
-		elo = d.get("elo", 1000)
+		var legacy_elo = d.get("elo", 1000)
+		elo_bullet = d.get("elo_bullet", legacy_elo)
+		elo_blitz  = d.get("elo_blitz",  1000)
+		elo_rapid  = d.get("elo_rapid",  1000)
 		solo_highscore = d.get("solo_highscore", 0)
 		total_points = d.get("total_points", 0)
 		purchased_hats = d.get("purchased_hats", [])
@@ -196,7 +201,9 @@ func _save_local() -> void:
 	file.store_string(JSON.stringify({
 		"player_id": player_id,
 		"name": player_name,
-		"elo": elo,
+		"elo_bullet": elo_bullet,
+		"elo_blitz":  elo_blitz,
+		"elo_rapid":  elo_rapid,
 		"solo_highscore": solo_highscore,
 		"total_points": total_points,
 		"purchased_hats": purchased_hats,
@@ -211,7 +218,9 @@ func _save_local() -> void:
 func _create_new_player() -> void:
 	player_id = _generate_uuid()
 	player_name = _random_name()
-	elo = 1000
+	elo_bullet = 1000
+	elo_blitz  = 1000
+	elo_rapid  = 1000
 	solo_highscore = 0
 	total_points = 0
 	purchased_hats = []
@@ -275,17 +284,26 @@ func equip_hat(hat_id: String) -> void:
 		hat_changed.emit(equipped_hat)
 		_save_local()
 
+func get_elo_for_mode(mode: String) -> int:
+	match mode:
+		"blitz": return elo_blitz
+		"rapid": return elo_rapid
+		_: return elo_bullet
+
 func apply_match_result(result: String, my_score: int, opp_score: int,
-		opp_name: String, opp_elo: int, elo_change: int) -> void:
+		opp_name: String, opp_elo: int, elo_change: int,
+		time_mode: String = "bullet") -> void:
+	var my_elo := get_elo_for_mode(time_mode)
 	# If server didn't calculate ELO (elo_change=0), calculate client-side
 	var actual_elo_change := elo_change
-	if elo_change == 0 and result != "draw":
-		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
-	elif elo_change == 0 and result == "draw":
-		actual_elo_change = calculate_elo_change(elo, opp_elo, result)
-	
-	elo += actual_elo_change
-	elo = max(100, elo)
+	if elo_change == 0:
+		actual_elo_change = calculate_elo_change(my_elo, opp_elo, result)
+
+	var new_elo: int = maxi(100, my_elo + actual_elo_change)
+	match time_mode:
+		"blitz": elo_blitz = new_elo
+		"rapid": elo_rapid = new_elo
+		_:       elo_bullet = new_elo
 	total_games += 1
 
 	match result:
@@ -350,7 +368,9 @@ func save_to_firebase() -> void:
 	var url = firebase_url + "/players/" + player_id + ".json"
 	var data = JSON.stringify({
 		"name": player_name,
-		"elo": elo,
+		"elo_bullet": elo_bullet,
+		"elo_blitz":  elo_blitz,
+		"elo_rapid":  elo_rapid,
 		"solo_highscore": solo_highscore,
 		"total_points": total_points,
 		"total_games": total_games,
@@ -403,7 +423,10 @@ func _on_profile_loaded(_result: int, code: int, _headers: PackedStringArray,
 	if json.data is Dictionary:
 		var d = json.data
 		player_name = d.get("name", player_name)
-		elo = d.get("elo", elo)
+		var legacy_elo_fb = d.get("elo", elo_bullet)
+		elo_bullet = d.get("elo_bullet", legacy_elo_fb)
+		elo_blitz  = d.get("elo_blitz",  elo_blitz)
+		elo_rapid  = d.get("elo_rapid",  elo_rapid)
 		solo_highscore = d.get("solo_highscore", solo_highscore)
 		total_points = d.get("total_points", total_points)
 		total_games = d.get("total_games", total_games)
@@ -421,20 +444,20 @@ func _on_profile_loaded(_result: int, code: int, _headers: PackedStringArray,
 # FIREBASE — LEADERBOARD
 # =====================
 
-func load_leaderboard() -> void:
+func load_leaderboard(sort_field: String = "elo_bullet") -> void:
 	if firebase_url.is_empty():
 		firebase_error.emit("Firebase not configured")
 		leaderboard_loaded.emit([])
 		return
 
-	var url = firebase_url + "/players.json?orderBy=\"elo\"&limitToLast=200"
+	var url = firebase_url + "/players.json?orderBy=%22" + sort_field + "%22&limitToLast=200"
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_leaderboard_loaded.bind(http))
+	http.request_completed.connect(_on_leaderboard_loaded.bind(http, sort_field))
 	http.request(url)
 
 func _on_leaderboard_loaded(_result: int, code: int, _headers: PackedStringArray,
-		body: PackedByteArray, http: HTTPRequest) -> void:
+		body: PackedByteArray, http: HTTPRequest, sort_field: String = "elo_bullet") -> void:
 	http.queue_free()
 
 	if code != 200:
@@ -454,7 +477,7 @@ func _on_leaderboard_loaded(_result: int, code: int, _headers: PackedStringArray
 			p["player_id"] = pid
 			players_arr.append(p)
 
-	players_arr.sort_custom(func(a, b): return a.get("elo", 0) > b.get("elo", 0))
+	players_arr.sort_custom(func(a, b): return a.get(sort_field, 0) > b.get(sort_field, 0))
 	leaderboard_loaded.emit(players_arr)
 
 # =====================

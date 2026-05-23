@@ -11,7 +11,9 @@ var sfx_volume: float = 1.0
 var master_volume: float = 1.0
 
 # === UI PREFS ===
-var leaderboard_tab: String = "elo"  # "elo" or "solo"
+var leaderboard_tab: String = "solo"  # "elo" or "solo"
+var leaderboard_elo_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
+var ranked_time_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
 
 const SAVE_PATH = "user://settings.cfg"
 
@@ -55,6 +57,10 @@ func set_leaderboard_tab(tab: String) -> void:
 	leaderboard_tab = tab
 	save_settings()
 
+func set_leaderboard_elo_mode(mode: String) -> void:
+	leaderboard_elo_mode = mode
+	save_settings()
+
 func set_sfx_volume(v: float) -> void:
 	sfx_volume = clampf(v, 0.0, 1.0)
 	SoundManager.sfx_volume = sfx_volume
@@ -74,6 +80,7 @@ func save_settings() -> void:
 	config.set_value("audio", "sfx_volume", sfx_volume)
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("ui", "leaderboard_tab", leaderboard_tab)
+	config.set_value("ui", "leaderboard_elo_mode", leaderboard_elo_mode)
 	config.save(SAVE_PATH)
 
 func load_settings() -> void:
@@ -84,7 +91,8 @@ func load_settings() -> void:
 		high_score = config.get_value("stats", "high_score", 0)
 		sfx_volume = config.get_value("audio", "sfx_volume", 1.0)
 		master_volume = config.get_value("audio", "master_volume", 1.0)
-		leaderboard_tab = config.get_value("ui", "leaderboard_tab", "elo")
+		leaderboard_tab = config.get_value("ui", "leaderboard_tab", "solo")
+		leaderboard_elo_mode = config.get_value("ui", "leaderboard_elo_mode", "bullet")
 
 	# Push saved volumes to SoundManager (it's loaded before us as autoload)
 	_apply_volume.call_deferred()

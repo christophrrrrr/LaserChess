@@ -269,7 +269,7 @@ func _build_center_area() -> Control:
 	var ranked_btn = _create_main_button("RANKED", Color(0.85, 0.5, 0.1), Color(0.68, 0.38, 0.05))
 	ranked_btn.pressed.connect(func():
 		SoundManager.play("click")
-		get_tree().change_scene_to_file("res://scenes/ranked_match.tscn")
+		get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
 	)
 	vbox.add_child(ranked_btn)
 	
@@ -574,7 +574,7 @@ func _update_profile_sidebar() -> void:
 	profile_name_edit.visible = false
 	name_edit_button.text = "edit name"
 
-	elo_label.text = str(PlayerData.elo)
+	elo_label.text = str(PlayerData.elo_bullet)
 	high_score_label.text = str(PlayerData.solo_highscore)
 	points_label.text = str(PlayerData.total_points)
 	record_label.text = str(PlayerData.wins) + "W / " + str(PlayerData.losses) + "L / " + str(PlayerData.draws) + "D"
@@ -612,13 +612,13 @@ func _render_mini_leaderboard() -> void:
 	if tab == "solo":
 		sorted.sort_custom(func(a, b): return a.get("solo_highscore", 0) > b.get("solo_highscore", 0))
 	else:
-		sorted.sort_custom(func(a, b): return a.get("elo", 0) > b.get("elo", 0))
+		sorted.sort_custom(func(a, b): return a.get("elo_bullet", 0) > b.get("elo_bullet", 0))
 
 	var count := mini(sorted.size(), 10)
 	for i in count:
 		var p: Dictionary = sorted[i]
 		var pname := p.get("name", "???") as String
-		var val: int = p.get("solo_highscore", 0) if tab == "solo" else p.get("elo", 0)
+		var val: int = p.get("solo_highscore", 0) if tab == "solo" else p.get("elo_bullet", 0)
 		var is_me: bool = p.get("player_id", "") == PlayerData.player_id
 		lb_content.add_child(_create_lb_row(i + 1, pname, val, is_me))
 
