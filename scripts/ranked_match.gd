@@ -37,8 +37,8 @@ var _is_spectating: bool = false
 var _queue_start_time: int = 0
 var _finding_label: Label = null
 var _elo_range_label: Label = null
-var _finding_dots_timer: float = 0.0
-var _finding_dots_count: int = 0
+var _queue_timer_label: Label = null
+var _dot_labels: Array = []
 
 # === HUD LAYER ===
 @onready var timer_label: Label             = $MatchHUD/TimerLabel
@@ -141,6 +141,8 @@ func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: S
 	opponent_player_id = opp_pid
 	_finding_label = null
 	_elo_range_label = null
+	_queue_timer_label = null
+	_dot_labels.clear()
 	opp_name_label.text = opp_name + " · " + str(opp_elo)
 	_start_countdown()
 
@@ -291,21 +293,45 @@ func _show_connecting() -> void:
 	result_container.visible = false
 	_set_match_hud(false)
 	countdown_label.visible = false
-
 	_clear_lobby()
-	_add_title()
-	_add_spacer(lobby_content, 30)
+	_dot_labels.clear()
+
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(440, 0)
+	var cs = StyleBoxFlat.new()
+	cs.bg_color = Color(0.06, 0.07, 0.13)
+	cs.set_corner_radius_all(18)
+	cs.border_color = Color(0.28, 0.32, 0.50, 0.6)
+	cs.set_border_width_all(2)
+	cs.set_content_margin_all(42)
+	card.add_theme_stylebox_override("panel", cs)
+	lobby_content.add_child(card)
+
+	var inner = VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 0)
+	card.add_child(inner)
+
+	var title = Label.new()
+	title.text = "RANKED MATCH"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_color_override("font_color", Color(0.85, 0.55, 0.1))
+	inner.add_child(title)
+
+	_add_spacer(inner, 28)
+	_add_divider(inner, Color(0.85, 0.55, 0.1), 0.22)
+	_add_spacer(inner, 28)
 
 	var lbl = Label.new()
 	lbl.text = "Connecting to server..."
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 22)
-	lbl.add_theme_color_override("font_color", Color(0.7, 0.7, 0.8))
-	lobby_content.add_child(lbl)
+	lbl.add_theme_font_size_override("font_size", 20)
+	lbl.add_theme_color_override("font_color", Color(0.62, 0.62, 0.78))
+	inner.add_child(lbl)
 	_pulse(lbl)
 
-	_add_spacer(lobby_content, 35)
-	_add_hint(lobby_content, "ESC to go back")
+	_add_spacer(inner, 28)
+	_add_hint(inner, "ESC  ·  go back")
 
 func _show_error(msg: String) -> void:
 	current_state = State.CONNECTING
@@ -313,20 +339,44 @@ func _show_error(msg: String) -> void:
 	result_container.visible = false
 	_set_match_hud(false)
 	countdown_label.visible = false
-
 	_clear_lobby()
-	_add_title()
-	_add_spacer(lobby_content, 25)
+	_dot_labels.clear()
+
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(440, 0)
+	var cs = StyleBoxFlat.new()
+	cs.bg_color = Color(0.09, 0.05, 0.05)
+	cs.set_corner_radius_all(18)
+	cs.border_color = Color(0.85, 0.3, 0.3, 0.65)
+	cs.set_border_width_all(2)
+	cs.set_content_margin_all(42)
+	card.add_theme_stylebox_override("panel", cs)
+	lobby_content.add_child(card)
+
+	var inner = VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 0)
+	card.add_child(inner)
+
+	var icon_lbl = Label.new()
+	icon_lbl.text = "⚠"
+	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_lbl.add_theme_font_size_override("font_size", 44)
+	icon_lbl.add_theme_color_override("font_color", Color(1.0, 0.42, 0.35))
+	inner.add_child(icon_lbl)
+
+	_add_spacer(inner, 16)
 
 	var err_lbl = Label.new()
 	err_lbl.text = msg
 	err_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	err_lbl.add_theme_font_size_override("font_size", 20)
-	err_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
-	lobby_content.add_child(err_lbl)
+	err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	err_lbl.custom_minimum_size = Vector2(360, 0)
+	err_lbl.add_theme_font_size_override("font_size", 18)
+	err_lbl.add_theme_color_override("font_color", Color(1.0, 0.52, 0.48))
+	inner.add_child(err_lbl)
 
-	_add_spacer(lobby_content, 25)
-	_add_hint(lobby_content, "SPACE to retry  •  ESC to go back")
+	_add_spacer(inner, 28)
+	_add_hint(inner, "SPACE  ·  retry          ESC  ·  go back")
 
 func _show_finding_opponent() -> void:
 	current_state = State.LOBBY
@@ -334,54 +384,138 @@ func _show_finding_opponent() -> void:
 	result_container.visible = false
 	_set_match_hud(false)
 	countdown_label.visible = false
-
 	_clear_lobby()
-	_add_title()
-	_add_spacer(lobby_content, 10)
+	_dot_labels.clear()
+	_queue_start_time = Time.get_ticks_msec()
 
-	# Mode + ELO info
-	var mode_lbl = Label.new()
-	mode_lbl.text = MODE_LABELS.get(_time_mode, "BULLET · 1:30")
-	mode_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mode_lbl.add_theme_font_size_override("font_size", 22)
-	mode_lbl.add_theme_color_override("font_color", Color(0.85, 0.55, 0.1))
-	lobby_content.add_child(mode_lbl)
+	# ── Mode-specific theming ──
+	const MODE_ICONS := {"bullet": "⚡", "blitz": "🔥", "rapid": "♟"}
+	const MODE_TIMES := {"bullet": "1 : 30  PER SIDE", "blitz": "3 : 00  PER SIDE", "rapid": "5 : 00  PER SIDE"}
+	var mode_color: Color
+	match _time_mode:
+		"blitz": mode_color = Color(0.30, 0.62, 1.00)
+		"rapid": mode_color = Color(0.22, 0.88, 0.48)
+		_:       mode_color = Color(1.00, 0.78, 0.12)
+	var mode_icon: String = MODE_ICONS.get(_time_mode, "⚡")
+	var mode_time: String = MODE_TIMES.get(_time_mode, "1 : 30  PER SIDE")
 
-	_add_spacer(lobby_content, 4)
+	# ── Card ──
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(520, 0)
+	var cs = StyleBoxFlat.new()
+	cs.bg_color = Color(0.06, 0.07, 0.13)
+	cs.set_corner_radius_all(20)
+	cs.border_color = Color(mode_color.r, mode_color.g, mode_color.b, 0.65)
+	cs.set_border_width_all(2)
+	cs.set_content_margin_all(44)
+	card.add_theme_stylebox_override("panel", cs)
+	lobby_content.add_child(card)
 
-	var elo_lbl = Label.new()
-	elo_lbl.text = "Your ELO:  " + str(PlayerData.get_elo_for_mode(_time_mode))
-	elo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	elo_lbl.add_theme_font_size_override("font_size", 16)
-	elo_lbl.add_theme_color_override("font_color", Color(0.55, 0.75, 0.55))
-	lobby_content.add_child(elo_lbl)
+	var inner = VBoxContainer.new()
+	inner.add_theme_constant_override("separation", 0)
+	card.add_child(inner)
 
-	_add_spacer(lobby_content, 28)
+	# ── Mode icon (pulsing) ──
+	var icon_lbl = Label.new()
+	icon_lbl.text = mode_icon
+	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	icon_lbl.add_theme_font_size_override("font_size", 62)
+	inner.add_child(icon_lbl)
+	_pulse(icon_lbl, 1.4)
 
-	# Animated "Finding opponent..." label
-	_finding_label = Label.new()
-	_finding_label.text = "Finding opponent..."
-	_finding_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_finding_label.add_theme_font_size_override("font_size", 26)
-	_finding_label.add_theme_color_override("font_color", Color(0.75, 0.75, 0.85))
-	lobby_content.add_child(_finding_label)
+	_add_spacer(inner, 8)
 
-	_add_spacer(lobby_content, 8)
+	# ── Mode name ──
+	var name_lbl = Label.new()
+	name_lbl.text = _time_mode.to_upper()
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 52)
+	name_lbl.add_theme_color_override("font_color", mode_color)
+	inner.add_child(name_lbl)
 
-	# ELO range label (updates in _process)
+	# ── Time control ──
+	var time_lbl = Label.new()
+	time_lbl.text = mode_time
+	time_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time_lbl.add_theme_font_size_override("font_size", 16)
+	time_lbl.add_theme_color_override("font_color", Color(0.40, 0.40, 0.55))
+	inner.add_child(time_lbl)
+
+	_add_spacer(inner, 26)
+	_add_divider(inner, mode_color, 0.22)
+	_add_spacer(inner, 22)
+
+	# ── Your ELO ──
+	var elo_row = HBoxContainer.new()
+	elo_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	elo_row.add_theme_constant_override("separation", 14)
+	inner.add_child(elo_row)
+
+	var elo_key = Label.new()
+	elo_key.text = "YOUR ELO"
+	elo_key.add_theme_font_size_override("font_size", 16)
+	elo_key.add_theme_color_override("font_color", Color(0.40, 0.40, 0.55))
+	elo_row.add_child(elo_key)
+
+	var elo_val = Label.new()
+	elo_val.text = str(PlayerData.get_elo_for_mode(_time_mode))
+	elo_val.add_theme_font_size_override("font_size", 30)
+	elo_val.add_theme_color_override("font_color", mode_color)
+	elo_row.add_child(elo_val)
+
+	_add_spacer(inner, 26)
+	_add_divider(inner, mode_color, 0.15)
+	_add_spacer(inner, 26)
+
+	# ── "SEARCHING FOR OPPONENT" ──
+	var search_lbl = Label.new()
+	search_lbl.text = "SEARCHING FOR OPPONENT"
+	search_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	search_lbl.add_theme_font_size_override("font_size", 19)
+	search_lbl.add_theme_color_override("font_color", Color(0.72, 0.72, 0.88))
+	inner.add_child(search_lbl)
+
+	_add_spacer(inner, 16)
+
+	# ── 3 animated pulsing dots (sine-animated in _process) ──
+	var dot_row = HBoxContainer.new()
+	dot_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dot_row.add_theme_constant_override("separation", 20)
+	inner.add_child(dot_row)
+
+	for _i in 3:
+		var dot = Label.new()
+		dot.text = "●"
+		dot.add_theme_font_size_override("font_size", 30)
+		dot.add_theme_color_override("font_color", mode_color)
+		dot_row.add_child(dot)
+		_dot_labels.append(dot)
+
+	_add_spacer(inner, 22)
+
+	# ── ELO search range (updates in _process) ──
 	_elo_range_label = Label.new()
-	_elo_range_label.text = "Searching: ±100 ELO"
+	_elo_range_label.text = "±100 ELO  search range"
 	_elo_range_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_elo_range_label.add_theme_font_size_override("font_size", 15)
-	_elo_range_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
-	lobby_content.add_child(_elo_range_label)
+	_elo_range_label.add_theme_color_override("font_color", Color(0.40, 0.40, 0.52))
+	inner.add_child(_elo_range_label)
 
-	_add_spacer(lobby_content, 28)
-	_add_hint(lobby_content, "ESC to go back")
+	_add_spacer(inner, 6)
 
-	_queue_start_time = Time.get_ticks_msec()
-	_finding_dots_timer = 0.0
-	_finding_dots_count = 0
+	# ── Queue timer (updates in _process) ──
+	_queue_timer_label = Label.new()
+	_queue_timer_label.text = "0:00"
+	_queue_timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_queue_timer_label.add_theme_font_size_override("font_size", 14)
+	_queue_timer_label.add_theme_color_override("font_color", Color(0.30, 0.30, 0.42))
+	inner.add_child(_queue_timer_label)
+
+	_add_spacer(inner, 26)
+	_add_divider(inner, mode_color, 0.14)
+	_add_spacer(inner, 18)
+
+	_add_hint(inner, "ESC  ·  cancel and go back")
 
 # =====================
 # COUNTDOWN
@@ -431,19 +565,21 @@ func _start_match() -> void:
 # =====================
 
 func _process(delta: float) -> void:
-	# Animate queue search dots + ELO range label
+	# Animate pulsing dots + update live labels while searching
 	if current_state == State.LOBBY:
-		_finding_dots_timer += delta
-		if _finding_dots_timer >= 0.45:
-			_finding_dots_timer = 0.0
-			_finding_dots_count += 1
-			var dots = ".".repeat((_finding_dots_count % 3) + 1)
-			if is_instance_valid(_finding_label):
-				_finding_label.text = "Finding opponent" + dots
-			if is_instance_valid(_elo_range_label):
-				var secs = float(Time.get_ticks_msec() - _queue_start_time) / 1000.0
-				var range_val = int(100 + 50 * (secs / 10.0))
-				_elo_range_label.text = "Searching: ±" + str(range_val) + " ELO"
+		var t := float(Time.get_ticks_msec()) / 1000.0
+		for i in _dot_labels.size():
+			if is_instance_valid(_dot_labels[i]):
+				var phase := t * 2.8 + i * 1.05
+				_dot_labels[i].modulate.a = 0.15 + 0.85 * (0.5 + 0.5 * sin(phase))
+		var secs := int(float(Time.get_ticks_msec() - _queue_start_time) / 1000.0)
+		if is_instance_valid(_queue_timer_label):
+			var m := secs / 60
+			var s := secs % 60
+			_queue_timer_label.text = str(m) + ":" + ("0" if s < 10 else "") + str(s)
+		if is_instance_valid(_elo_range_label):
+			var range_val := int(100 + 50 * (float(secs) / 10.0))
+			_elo_range_label.text = "±" + str(range_val) + " ELO  search range"
 		return
 
 	if current_state != State.PLAYING:
@@ -821,9 +957,16 @@ func _add_hint(parent: Control, text: String) -> void:
 	var lbl = Label.new()
 	lbl.text = text
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 16)
-	lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+	lbl.add_theme_font_size_override("font_size", 15)
+	lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.48))
 	parent.add_child(lbl)
+
+func _add_divider(parent: Control, color: Color, alpha: float = 0.2) -> void:
+	var div = ColorRect.new()
+	div.custom_minimum_size = Vector2(0, 1)
+	div.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	div.color = Color(color.r, color.g, color.b, alpha)
+	parent.add_child(div)
 
 func _pulse(node: Control, duration: float = 0.6) -> void:
 	var tween = node.create_tween()

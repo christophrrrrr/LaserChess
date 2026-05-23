@@ -31,6 +31,16 @@ var total_games: int = 0
 var wins: int = 0
 var losses: int = 0
 var draws: int = 0
+# Per-mode W/L/D (start at 0 for existing players)
+var wins_bullet: int = 0
+var losses_bullet: int = 0
+var draws_bullet: int = 0
+var wins_blitz: int = 0
+var losses_blitz: int = 0
+var draws_blitz: int = 0
+var wins_rapid: int = 0
+var losses_rapid: int = 0
+var draws_rapid: int = 0
 
 var _save_path: String = "user://player.json"
 
@@ -189,10 +199,19 @@ func _load_local() -> void:
 		matches = d.get("matches", [])
 		if matches == null:
 			matches = []
-		total_games = d.get("total_games", 0)
-		wins = d.get("wins", 0)
-		losses = d.get("losses", 0)
-		draws = d.get("draws", 0)
+		total_games   = int(d.get("total_games", 0))
+		wins          = int(d.get("wins", 0))
+		losses        = int(d.get("losses", 0))
+		draws         = int(d.get("draws", 0))
+		wins_bullet   = int(d.get("wins_bullet", 0))
+		losses_bullet = int(d.get("losses_bullet", 0))
+		draws_bullet  = int(d.get("draws_bullet", 0))
+		wins_blitz    = int(d.get("wins_blitz", 0))
+		losses_blitz  = int(d.get("losses_blitz", 0))
+		draws_blitz   = int(d.get("draws_blitz", 0))
+		wins_rapid    = int(d.get("wins_rapid", 0))
+		losses_rapid  = int(d.get("losses_rapid", 0))
+		draws_rapid   = int(d.get("draws_rapid", 0))
 
 func _save_local() -> void:
 	var file = FileAccess.open(_save_path, FileAccess.WRITE)
@@ -212,7 +231,10 @@ func _save_local() -> void:
 		"total_games": total_games,
 		"wins": wins,
 		"losses": losses,
-		"draws": draws
+		"draws": draws,
+		"wins_bullet": wins_bullet, "losses_bullet": losses_bullet, "draws_bullet": draws_bullet,
+		"wins_blitz":  wins_blitz,  "losses_blitz":  losses_blitz,  "draws_blitz":  draws_blitz,
+		"wins_rapid":  wins_rapid,  "losses_rapid":  losses_rapid,  "draws_rapid":  draws_rapid,
 	}))
 
 func _create_new_player() -> void:
@@ -290,6 +312,12 @@ func get_elo_for_mode(mode: String) -> int:
 		"rapid": return elo_rapid
 		_: return elo_bullet
 
+func get_record_for_mode(mode: String) -> Dictionary:
+	match mode:
+		"blitz": return {"wins": wins_blitz, "losses": losses_blitz, "draws": draws_blitz}
+		"rapid": return {"wins": wins_rapid, "losses": losses_rapid, "draws": draws_rapid}
+		_:       return {"wins": wins_bullet, "losses": losses_bullet, "draws": draws_bullet}
+
 func apply_match_result(result: String, my_score: int, opp_score: int,
 		opp_name: String, opp_elo: int, elo_change: int,
 		time_mode: String = "bullet") -> void:
@@ -314,6 +342,24 @@ func apply_match_result(result: String, my_score: int, opp_score: int,
 		"draw":
 			draws += 1
 
+	# Per-mode counters
+	match time_mode:
+		"blitz":
+			match result:
+				"win":  wins_blitz += 1
+				"lose": losses_blitz += 1
+				"draw": draws_blitz += 1
+		"rapid":
+			match result:
+				"win":  wins_rapid += 1
+				"lose": losses_rapid += 1
+				"draw": draws_rapid += 1
+		_:
+			match result:
+				"win":  wins_bullet += 1
+				"lose": losses_bullet += 1
+				"draw": draws_bullet += 1
+
 	matches.append({
 		"opponent": opp_name,
 		"opp_elo": opp_elo,
@@ -321,6 +367,7 @@ func apply_match_result(result: String, my_score: int, opp_score: int,
 		"opp_score": opp_score,
 		"result": result,
 		"elo_change": actual_elo_change,
+		"time_mode": time_mode,
 		"timestamp": int(Time.get_unix_time_from_system())
 	})
 	if matches.size() > 20:
@@ -368,6 +415,7 @@ func save_to_firebase() -> void:
 	var url = firebase_url + "/players/" + player_id + ".json"
 	var data = JSON.stringify({
 		"name": player_name,
+		"elo": elo_bullet,
 		"elo_bullet": elo_bullet,
 		"elo_blitz":  elo_blitz,
 		"elo_rapid":  elo_rapid,
@@ -377,6 +425,9 @@ func save_to_firebase() -> void:
 		"wins": wins,
 		"losses": losses,
 		"draws": draws,
+		"wins_bullet": wins_bullet, "losses_bullet": losses_bullet, "draws_bullet": draws_bullet,
+		"wins_blitz":  wins_blitz,  "losses_blitz":  losses_blitz,  "draws_blitz":  draws_blitz,
+		"wins_rapid":  wins_rapid,  "losses_rapid":  losses_rapid,  "draws_rapid":  draws_rapid,
 		"matches": matches
 	})
 
@@ -430,9 +481,18 @@ func _on_profile_loaded(_result: int, code: int, _headers: PackedStringArray,
 		solo_highscore = d.get("solo_highscore", solo_highscore)
 		total_points = d.get("total_points", total_points)
 		total_games = d.get("total_games", total_games)
-		wins = d.get("wins", wins)
-		losses = d.get("losses", losses)
-		draws = d.get("draws", draws)
+		wins          = int(d.get("wins", wins))
+		losses        = int(d.get("losses", losses))
+		draws         = int(d.get("draws", draws))
+		wins_bullet   = int(d.get("wins_bullet", 0))
+		losses_bullet = int(d.get("losses_bullet", 0))
+		draws_bullet  = int(d.get("draws_bullet", 0))
+		wins_blitz    = int(d.get("wins_blitz", 0))
+		losses_blitz  = int(d.get("losses_blitz", 0))
+		draws_blitz   = int(d.get("draws_blitz", 0))
+		wins_rapid    = int(d.get("wins_rapid", 0))
+		losses_rapid  = int(d.get("losses_rapid", 0))
+		draws_rapid   = int(d.get("draws_rapid", 0))
 		matches = d.get("matches", matches)
 		if matches == null:
 			matches = []
@@ -450,7 +510,9 @@ func load_leaderboard(sort_field: String = "elo_bullet") -> void:
 		leaderboard_loaded.emit([])
 		return
 
-	var url = firebase_url + "/players.json?orderBy=%22" + sort_field + "%22&limitToLast=200"
+	# Always query by "elo" — guaranteed to exist on all records (old and new).
+	# Client-side sort by sort_field (elo_bullet / elo_blitz / elo_rapid / solo_highscore).
+	var url = firebase_url + "/players.json?orderBy=%22elo%22&limitToLast=200"
 	var http = HTTPRequest.new()
 	add_child(http)
 	http.request_completed.connect(_on_leaderboard_loaded.bind(http, sort_field))
@@ -475,6 +537,13 @@ func _on_leaderboard_loaded(_result: int, code: int, _headers: PackedStringArray
 		var p = json.data[pid]
 		if p is Dictionary:
 			p["player_id"] = pid
+			# Backward-compat: old records have "elo" but not "elo_bullet/blitz/rapid"
+			if not p.has("elo_bullet"):
+				p["elo_bullet"] = p.get("elo", 1000)
+			if not p.has("elo_blitz"):
+				p["elo_blitz"] = 1000
+			if not p.has("elo_rapid"):
+				p["elo_rapid"] = 1000
 			players_arr.append(p)
 
 	players_arr.sort_custom(func(a, b): return a.get(sort_field, 0) > b.get(sort_field, 0))

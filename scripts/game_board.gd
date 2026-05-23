@@ -963,9 +963,9 @@ func _pawn_dwell_watch(piece: Node2D, start_col: int, diagonals: Array[Vector2i]
 				player.die()
 				return current_col
 
-			# Player dodged — continue marching from new lane
-			is_lunging = false
-			break  # resume watching from next frame
+			# Player dodged — end dwell immediately so the stale diagonals
+			# array can't trigger a second lunge from the new column
+			return current_col
 
 	return current_col
 

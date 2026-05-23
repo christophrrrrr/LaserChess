@@ -348,9 +348,10 @@ func _create_row_hbox(rank_text: String, name_text: String, elo_text: String,
 func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: String = "elo_bullet") -> Button:
 	var name_str = data.get("name", "???")
 	var elo_val = data.get(elo_field, data.get("elo_bullet", data.get("elo", 1000)))
-	var w = data.get("wins", 0)
-	var l = data.get("losses", 0)
-	var d_val = data.get("draws", 0)
+	var mode_key = elo_field.replace("elo_", "")
+	var w     = int(data.get("wins_"   + mode_key, data.get("wins", 0)))
+	var l     = int(data.get("losses_" + mode_key, data.get("losses", 0)))
+	var d_val = int(data.get("draws_"  + mode_key, data.get("draws", 0)))
 	var pid = data.get("player_id", "")
 	var record_str = str(w) + "W " + str(l) + "L " + str(d_val) + "D"
 
@@ -562,23 +563,33 @@ func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button
 # PROFILE POPUP
 # =====================
 
-func _on_leaderboard_player_clicked(pid: String, pname: String) -> void:
+func _build_own_profile_data() -> Dictionary:
+	return {
+		"name": PlayerData.player_name,
+		"elo_bullet": PlayerData.elo_bullet,
+		"elo_blitz":  PlayerData.elo_blitz,
+		"elo_rapid":  PlayerData.elo_rapid,
+		"solo_highscore": PlayerData.solo_highscore,
+		"total_games": PlayerData.total_games,
+		"wins": PlayerData.wins,
+		"losses": PlayerData.losses,
+		"draws": PlayerData.draws,
+		"wins_bullet": PlayerData.wins_bullet, "losses_bullet": PlayerData.losses_bullet, "draws_bullet": PlayerData.draws_bullet,
+		"wins_blitz":  PlayerData.wins_blitz,  "losses_blitz":  PlayerData.losses_blitz,  "draws_blitz":  PlayerData.draws_blitz,
+		"wins_rapid":  PlayerData.wins_rapid,  "losses_rapid":  PlayerData.losses_rapid,  "draws_rapid":  PlayerData.draws_rapid,
+		"matches": PlayerData.matches,
+		"player_id": PlayerData.player_id
+	}
+
+func _show_own_profile() -> void:
+	var start = _active_elo_mode if _active_tab == "elo" else "bullet"
+	_show_profile(_build_own_profile_data(), true, start)
+
+func _on_leaderboard_player_clicked(pid: String, _pname: String) -> void:
 	if pid == PlayerData.player_id:
-		_show_profile({
-			"name": PlayerData.player_name,
-			"elo_bullet": PlayerData.elo_bullet,
-			"elo_blitz":  PlayerData.elo_blitz,
-			"elo_rapid":  PlayerData.elo_rapid,
-			"solo_highscore": PlayerData.solo_highscore,
-			"total_games": PlayerData.total_games,
-			"wins": PlayerData.wins,
-			"losses": PlayerData.losses,
-			"draws": PlayerData.draws,
-			"matches": PlayerData.matches,
-			"player_id": PlayerData.player_id
-		})
+		_show_own_profile()
 		return
-	_show_profile_loading(pname)
+	_show_profile_loading(_pname)
 	PlayerData.load_player_profile(pid)
 
 func _show_profile_loading(pname: String) -> void:
@@ -600,9 +611,10 @@ func _on_profile_loaded(data: Dictionary) -> void:
 	if data.is_empty():
 		profile_popup.visible = false
 		return
-	_show_profile(data)
+	var start = _active_elo_mode if _active_tab == "elo" else "bullet"
+	_show_profile(data, false, start)
 
-func _show_profile(data: Dictionary) -> void:
+func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = "bullet") -> void:
 	_clear_profile_popup()
 	profile_popup.visible = true
 
@@ -612,100 +624,207 @@ func _show_profile(data: Dictionary) -> void:
 	profile_popup.add_child(center)
 
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(400, 0)
+	card.custom_minimum_size = Vector2(460, 0)
 	var card_style = StyleBoxFlat.new()
-	card_style.bg_color = Color(0.06, 0.06, 0.1)
-	card_style.set_corner_radius_all(12)
-	card_style.border_color = Color(0.3, 0.3, 0.4)
-	card_style.set_border_width_all(1)
-	card_style.set_content_margin_all(20)
+	card_style.bg_color = Color(0.06, 0.07, 0.12)
+	card_style.set_corner_radius_all(14)
+	card_style.border_color = Color(0.25, 0.28, 0.42)
+	card_style.set_border_width_all(2)
+	card_style.set_content_margin_all(24)
 	card.add_theme_stylebox_override("panel", card_style)
 	center.add_child(card)
 
 	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
+	vbox.add_theme_constant_override("separation", 4)
 	card.add_child(vbox)
 
-	# Name
+	# ── Name ──
 	var name_lbl = Label.new()
 	name_lbl.text = data.get("name", "???")
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 32)
+	name_lbl.add_theme_font_size_override("font_size", 30)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(name_lbl)
 
+	# ── Name-change row (own profile only) ──
+	if is_own:
+		_add_spacer(vbox, 6)
+		var name_row = HBoxContainer.new()
+		name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		name_row.add_theme_constant_override("separation", 8)
+		vbox.add_child(name_row)
+
+		var name_edit = LineEdit.new()
+		name_edit.text = data.get("name", "")
+		name_edit.placeholder_text = "New name..."
+		name_edit.max_length = 16
+		name_edit.custom_minimum_size = Vector2(180, 30)
+		name_edit.add_theme_font_size_override("font_size", 15)
+		name_row.add_child(name_edit)
+
+		var confirm_btn = Button.new()
+		confirm_btn.text = "CONFIRM"
+		confirm_btn.custom_minimum_size = Vector2(90, 30)
+		confirm_btn.add_theme_font_size_override("font_size", 13)
+		var cb_style = StyleBoxFlat.new()
+		cb_style.bg_color = Color(0.1, 0.3, 0.15)
+		cb_style.set_corner_radius_all(6)
+		cb_style.border_color = Color(0.3, 0.75, 0.4, 0.9)
+		cb_style.set_border_width_all(1)
+		cb_style.set_content_margin_all(4)
+		confirm_btn.add_theme_stylebox_override("normal", cb_style)
+		var cb_hover = cb_style.duplicate() as StyleBoxFlat
+		cb_hover.bg_color = Color(0.15, 0.4, 0.2)
+		confirm_btn.add_theme_stylebox_override("hover", cb_hover)
+		confirm_btn.add_theme_stylebox_override("pressed", cb_hover)
+		confirm_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		confirm_btn.add_theme_color_override("font_color", Color(0.5, 1.0, 0.6))
+		confirm_btn.pressed.connect(func():
+			var new_name = name_edit.text.strip_edges()
+			if new_name.is_empty():
+				return
+			PlayerData.set_player_name(new_name)
+			name_lbl.text = new_name
+		)
+		name_row.add_child(confirm_btn)
+
+	_add_spacer(vbox, 10)
+
+	# ── Mode tab row ──
+	var mode_tab_row = HBoxContainer.new()
+	mode_tab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_tab_row.add_theme_constant_override("separation", 8)
+	vbox.add_child(mode_tab_row)
+
+	var _profile_mode = start_mode
+	var mode_tab_buttons: Dictionary = {}
+
+	# Stats section — rebuilt when mode tab changes
+	_add_spacer(vbox, 8)
+	var stats_vbox = VBoxContainer.new()
+	stats_vbox.add_theme_constant_override("separation", 2)
+	vbox.add_child(stats_vbox)
+
+	# Solo section (always shown)
 	_add_spacer(vbox, 12)
+	var sep_lbl = Label.new()
+	sep_lbl.text = "─── SOLO SCORES ───"
+	sep_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sep_lbl.add_theme_font_size_override("font_size", 12)
+	sep_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.5))
+	vbox.add_child(sep_lbl)
+	_add_spacer(vbox, 4)
+	var hs = int(data.get("solo_highscore", 0))
+	var total_g = int(data.get("total_games", 0))
+	_add_stat_line(vbox, "Best Score",   str(hs),      Color(0.85, 0.75, 0.3))
+	_add_stat_line(vbox, "Total Games",  str(total_g), Color(0.65, 0.65, 0.75))
 
-	# Stats
-	var legacy_elo = data.get("elo", 1000)
-	var elo_b = data.get("elo_bullet", legacy_elo)
-	var elo_bl = data.get("elo_blitz",  1000)
-	var elo_r = data.get("elo_rapid",   1000)
-	var total = data.get("total_games", 0)
-	var w = data.get("wins", 0)
-	var l = data.get("losses", 0)
-	var d = data.get("draws", 0)
-	var hs = data.get("solo_highscore", 0)
-	var wr = ("%.0f" % (float(w) / float(total) * 100.0)) + "%" if total > 0 else "—"
+	# Match history section — rebuilt when mode tab changes
+	_add_spacer(vbox, 12)
+	var hist_header_lbl = Label.new()
+	hist_header_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hist_header_lbl.add_theme_font_size_override("font_size", 13)
+	hist_header_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.55))
+	vbox.add_child(hist_header_lbl)
+	_add_spacer(vbox, 4)
+	var hist_vbox = VBoxContainer.new()
+	hist_vbox.add_theme_constant_override("separation", 2)
+	vbox.add_child(hist_vbox)
 
-	_add_stat_line(vbox, "⚡ Bullet ELO", str(elo_b),  Color(0.95, 0.78, 0.1))
-	_add_stat_line(vbox, "🔥 Blitz ELO",  str(elo_bl), Color(0.2,  0.65, 1.0))
-	_add_stat_line(vbox, "♟ Rapid ELO",   str(elo_r),  Color(0.2,  0.9,  0.45))
-	_add_stat_line(vbox, "Solo Highscore", str(hs), Color(0.7, 0.7, 0.8))
-	_add_stat_line(vbox, "Matches", str(total) + "  (" + str(w) + "W / " + str(l) + "L / " + str(d) + "D)", Color(0.7, 0.7, 0.8))
-	_add_stat_line(vbox, "Win Rate", wr, Color(0.7, 0.7, 0.8))
-
-	# Match history
-	var match_list = data.get("matches", [])
-	if match_list != null and match_list is Array and not match_list.is_empty():
-		_add_spacer(vbox, 14)
-
-		var hist_title = Label.new()
-		hist_title.text = "Recent Matches"
-		hist_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hist_title.add_theme_font_size_override("font_size", 16)
-		hist_title.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-		vbox.add_child(hist_title)
-
-		_add_spacer(vbox, 4)
-
-		var show_list = match_list.duplicate()
-		show_list.reverse()
-		var count = mini(show_list.size(), 10)
-
-		for i in count:
-			var m = show_list[i]
-			if not m is Dictionary:
-				continue
-			var result_str = m.get("result", "?")
-			var ms = m.get("my_score", 0)
-			var os = m.get("opp_score", 0)
-			var oname = m.get("opponent", "???")
-			var ec = m.get("elo_change", 0)
-			var ec_str = ("+" if ec >= 0 else "") + str(ec)
-
-			var color = Color(0.5, 0.8, 0.5)
-			if result_str == "lose":
-				color = Color(0.8, 0.4, 0.4)
-			elif result_str == "draw":
-				color = Color(0.7, 0.7, 0.5)
-
-			var text = result_str.to_upper() + "  " + str(ms) + "-" + str(os) + "  vs " + oname + "  (" + ec_str + ")"
-			var match_lbl = Label.new()
-			match_lbl.text = text
-			match_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			match_lbl.add_theme_font_size_override("font_size", 13)
-			match_lbl.add_theme_color_override("font_color", color)
-			vbox.add_child(match_lbl)
-
-	_add_spacer(vbox, 16)
-
+	_add_spacer(vbox, 14)
 	var close_hint = Label.new()
-	close_hint.text = "Click esc to close"
+	close_hint.text = "ESC or click outside to close"
 	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	close_hint.add_theme_font_size_override("font_size", 13)
-	close_hint.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+	close_hint.add_theme_font_size_override("font_size", 12)
+	close_hint.add_theme_color_override("font_color", Color(0.35, 0.35, 0.45))
 	vbox.add_child(close_hint)
+
+	# Helper: refresh the mode-specific sections
+	var refresh_mode_fn = func(mode: String) -> void:
+		_profile_mode = mode
+		# Style tabs
+		for m in mode_tab_buttons:
+			_style_elo_mode_button(mode_tab_buttons[m], m == mode)
+		# Rebuild stats
+		for c in stats_vbox.get_children():
+			c.queue_free()
+		_refresh_profile_stats(mode, data, stats_vbox)
+		# Rebuild history header + entries
+		var mode_icons = {"bullet": "🔫", "blitz": "⚡", "rapid": "⏱"}
+		hist_header_lbl.text = "── RECENT MATCHES  " + mode_icons.get(mode, "") + " " + mode.to_upper() + " ──"
+		for c in hist_vbox.get_children():
+			c.queue_free()
+		_build_match_history(mode, data, hist_vbox)
+
+	# Build the 3 mode tab buttons
+	for tab_mode in ["bullet", "blitz", "rapid"]:
+		var icons = {"bullet": "🔫", "blitz": "⚡", "rapid": "⏱"}
+		var tab_btn = _create_elo_mode_button(icons[tab_mode] + " " + tab_mode.to_upper())
+		var captured_mode = tab_mode
+		tab_btn.pressed.connect(func():
+			SoundManager.play("click")
+			refresh_mode_fn.call(captured_mode)
+		)
+		mode_tab_row.add_child(tab_btn)
+		mode_tab_buttons[tab_mode] = tab_btn
+
+	# Initial render for start_mode
+	refresh_mode_fn.call(start_mode)
+
+func _refresh_profile_stats(mode: String, data: Dictionary, stats_vbox: VBoxContainer) -> void:
+	var legacy_elo = int(data.get("elo", 1000))
+	var elo = int(data.get("elo_" + mode, legacy_elo if mode == "bullet" else 1000))
+	var w   = int(data.get("wins_"   + mode, data.get("wins", 0)))
+	var l   = int(data.get("losses_" + mode, data.get("losses", 0)))
+	var d   = int(data.get("draws_"  + mode, data.get("draws", 0)))
+	var total = w + l + d
+	var wr_str = ("%.1f" % (float(w) / float(total) * 100.0)) + "%" if total > 0 else "—"
+
+	var accent = Color(0.95, 0.78, 0.1) if mode == "bullet" else \
+				 (Color(0.2, 0.65, 1.0) if mode == "blitz" else Color(0.2, 0.9, 0.45))
+	_add_stat_line(stats_vbox, "ELO",      str(elo),   accent)
+	_add_stat_line(stats_vbox, "Wins",     str(w),     Color(0.4, 0.9, 0.5))
+	_add_stat_line(stats_vbox, "Losses",   str(l),     Color(0.9, 0.4, 0.4))
+	_add_stat_line(stats_vbox, "Draws",    str(d),     Color(0.8, 0.8, 0.45))
+	_add_stat_line(stats_vbox, "Win Rate", wr_str,     Color(0.65, 0.65, 0.75))
+
+func _build_match_history(mode: String, data: Dictionary, hist_vbox: VBoxContainer) -> void:
+	var match_list = data.get("matches", [])
+	if match_list == null or not match_list is Array:
+		match_list = []
+	# Filter by mode (entries without time_mode treated as "bullet")
+	var filtered: Array = []
+	for m in match_list:
+		if m is Dictionary and m.get("time_mode", "bullet") == mode:
+			filtered.append(m)
+	filtered.reverse()
+	var count = mini(filtered.size(), 8)
+	if count == 0:
+		var empty_lbl = Label.new()
+		empty_lbl.text = "No matches yet in this mode."
+		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		empty_lbl.add_theme_font_size_override("font_size", 13)
+		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+		hist_vbox.add_child(empty_lbl)
+		return
+	for i in count:
+		var m = filtered[i]
+		var result_str = m.get("result", "?")
+		var ms  = m.get("my_score", 0)
+		var os  = m.get("opp_score", 0)
+		var oname = m.get("opponent", "???")
+		var ec  = m.get("elo_change", 0)
+		var ec_str = ("+" if ec >= 0 else "") + str(ec)
+		var color = Color(0.4, 0.85, 0.5) if result_str == "win" else \
+					(Color(0.85, 0.35, 0.35) if result_str == "lose" else Color(0.75, 0.75, 0.45))
+		var text = result_str.to_upper() + "  " + str(ms) + "-" + str(os) + \
+				   "  vs " + oname + "  (" + ec_str + " ELO)"
+		var lbl = Label.new()
+		lbl.text = text
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.add_theme_color_override("font_color", color)
+		hist_vbox.add_child(lbl)
 
 func _add_stat_line(parent: VBoxContainer, label: String, value: String, color: Color) -> void:
 	var hbox = HBoxContainer.new()

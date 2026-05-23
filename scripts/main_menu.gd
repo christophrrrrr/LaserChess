@@ -9,6 +9,7 @@ extends Control
 
 var settings_panel: Control
 var shop_panel: Control
+var profile_popup: Control
 
 # Settings
 var color_toggle_button: Button
@@ -20,8 +21,6 @@ var master_value_label: Label
 
 # Profile
 var profile_name_label: Label
-var profile_name_edit: LineEdit
-var name_edit_button: Button
 var elo_label: Label
 var high_score_label: Label
 var points_label: Label
@@ -50,6 +49,7 @@ func _ready() -> void:
 	_setup_shop_panel()
 	settings_panel.visible = false
 	shop_panel.visible = false
+	_setup_profile_popup()
 	_update_profile_sidebar()
 	_load_mini_leaderboard()
 	PlayerData.hat_changed.connect(func(_h): _update_player_model())
@@ -339,53 +339,6 @@ func _build_right_panel() -> PanelContainer:
 	profile_name_label.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(profile_name_label)
 
-	profile_name_edit = LineEdit.new()
-	profile_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	profile_name_edit.max_length = 16
-
-	# Let it use the panel width instead of staying tiny
-	profile_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-
-	# Make it visually closer to the big name label
-	profile_name_edit.custom_minimum_size = Vector2(0, 72)
-	profile_name_edit.add_theme_font_size_override("font_size", 36)
-
-	# Add a little padding so the text sits nicely
-	profile_name_edit.add_theme_constant_override("caret_width", 2)
-	profile_name_edit.add_theme_constant_override("minimum_character_width", 16)
-	
-	# CRITICAL: Enable virtual keyboard and make it editable
-	profile_name_edit.virtual_keyboard_enabled = true
-	profile_name_edit.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_DEFAULT
-	profile_name_edit.editable = true
-	profile_name_edit.context_menu_enabled = true
-	profile_name_edit.selecting_enabled = true
-	profile_name_edit.caret_blink = true
-	
-	# Style for visibility
-	var edit_style = StyleBoxFlat.new()
-	edit_style.bg_color = Color(0.1, 0.1, 0.15)
-	edit_style.set_corner_radius_all(8)
-	edit_style.set_border_width_all(2)
-	edit_style.border_color = Color(0.4, 0.6, 0.8)
-	edit_style.set_content_margin_all(12)
-	profile_name_edit.add_theme_stylebox_override("normal", edit_style)
-	profile_name_edit.add_theme_stylebox_override("focus", edit_style)
-
-	profile_name_edit.visible = false
-	profile_name_edit.text_submitted.connect(func(_t): _save_name())
-	vbox.add_child(profile_name_edit)
-
-
-	_add_spacer(vbox, 4)
-
-	name_edit_button = _create_text_button("edit name")
-	name_edit_button.add_theme_font_size_override("font_size", 22)
-	name_edit_button.custom_minimum_size = Vector2(0, 44)
-	name_edit_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	name_edit_button.pressed.connect(_on_name_edit_pressed)
-	vbox.add_child(name_edit_button)
-
 	_add_spacer(vbox, 28)
 
 	# Divider
@@ -407,6 +360,34 @@ func _build_right_panel() -> PanelContainer:
 	record_label = _create_stat_display(vbox, "RECORD", Color(0.55, 0.57, 0.65), 28)
 	_add_spacer(vbox, 8)
 	winrate_label = _create_stat_display(vbox, "WIN RATE", Color(0.55, 0.57, 0.65), 28)
+
+	_add_spacer(vbox, 20)
+
+	# MY PROFILE button
+	var profile_btn = Button.new()
+	profile_btn.text = "MY PROFILE"
+	profile_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	profile_btn.custom_minimum_size = Vector2(0, 48)
+	profile_btn.add_theme_font_size_override("font_size", 18)
+	var pb_s = StyleBoxFlat.new()
+	pb_s.bg_color = Color(0.1, 0.13, 0.22)
+	pb_s.set_corner_radius_all(10)
+	pb_s.border_color = Color(0.35, 0.55, 1.0, 0.75)
+	pb_s.set_border_width_all(2)
+	pb_s.set_content_margin_all(6)
+	profile_btn.add_theme_stylebox_override("normal", pb_s)
+	var pb_h = pb_s.duplicate() as StyleBoxFlat
+	pb_h.bg_color = Color(0.15, 0.2, 0.35)
+	pb_h.border_color = Color(0.5, 0.7, 1.0)
+	profile_btn.add_theme_stylebox_override("hover", pb_h)
+	profile_btn.add_theme_stylebox_override("pressed", pb_h)
+	profile_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	profile_btn.add_theme_color_override("font_color", Color(0.55, 0.78, 1.0))
+	profile_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_show_own_profile_popup()
+	)
+	vbox.add_child(profile_btn)
 
 	# Flexible spacer
 	var flex = Control.new()
@@ -570,9 +551,6 @@ func _update_player_model() -> void:
 func _update_profile_sidebar() -> void:
 	_update_player_model()
 	profile_name_label.text = PlayerData.player_name
-	profile_name_label.visible = true
-	profile_name_edit.visible = false
-	name_edit_button.text = "edit name"
 
 	elo_label.text = str(PlayerData.elo_bullet)
 	high_score_label.text = str(PlayerData.solo_highscore)
@@ -1161,51 +1139,6 @@ func _style_mini_tab(btn: Button, is_active: bool) -> void:
 func _update_color_label() -> void:
 	color_label.text = "WHITE" if GameSettings.player_is_white else "BLACK"
 
-func _on_name_edit_pressed() -> void:
-	SoundManager.play("click")
-	if profile_name_edit.visible:
-		_save_name()
-	else:
-		# On HTML5/Web, use JavaScript prompt as fallback (Godot LineEdit has virtual keyboard issues)
-		if OS.has_feature("web"):
-			_show_web_name_prompt()
-		else:
-			# Native platforms - use normal LineEdit
-			profile_name_label.visible = false
-			profile_name_edit.visible = true
-			profile_name_edit.text = PlayerData.player_name
-			profile_name_edit.grab_focus()
-			profile_name_edit.select_all()
-			name_edit_button.text = "save"
-
-func _show_web_name_prompt() -> void:
-	# Use JavaScript prompt for web platform (works with mobile keyboards)
-	if OS.has_feature("web"):
-		var js_code = """
-		(function() {
-			var result = prompt('Enter your name:', '%s');
-			if (result !== null && result.trim() !== '') {
-				return result.trim().substring(0, 16);
-			}
-			return '';
-		})();
-		""" % PlayerData.player_name.replace("'", "\\'")
-		
-		var result = JavaScriptBridge.eval(js_code)
-		if result != null and str(result).strip_edges() != "":
-			PlayerData.set_player_name(str(result).strip_edges())
-			profile_name_label.text = PlayerData.player_name
-			_update_profile_sidebar()
-
-func _save_name() -> void:
-	var new_name = profile_name_edit.text.strip_edges()
-	if not new_name.is_empty():
-		PlayerData.set_player_name(new_name)
-	profile_name_label.text = PlayerData.player_name
-	profile_name_label.visible = true
-	profile_name_edit.visible = false
-	name_edit_button.text = "edit name"
-
 func _on_shop_pressed() -> void:
 	SoundManager.play("click")
 	_refresh_shop()
@@ -1219,8 +1152,337 @@ func _on_shop_back_pressed() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
-			if shop_panel.visible:
+			if profile_popup and profile_popup.visible:
+				SoundManager.play("click")
+				profile_popup.visible = false
+			elif shop_panel.visible:
 				_on_shop_back_pressed()
 			elif settings_panel.visible:
 				SoundManager.play("click")
 				settings_panel.visible = false
+
+# =====================
+# PROFILE POPUP
+# =====================
+
+func _setup_profile_popup() -> void:
+	var layer = CanvasLayer.new()
+	layer.layer = 50
+	add_child(layer)
+
+	profile_popup = Control.new()
+	profile_popup.set_anchors_preset(Control.PRESET_FULL_RECT)
+	profile_popup.visible = false
+	layer.add_child(profile_popup)
+
+	var popup_bg = ColorRect.new()
+	popup_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	popup_bg.color = Color(0, 0, 0, 0.82)
+	popup_bg.name = "PopupBG"
+	profile_popup.add_child(popup_bg)
+	popup_bg.gui_input.connect(func(event):
+		if event is InputEventMouseButton and event.pressed:
+			profile_popup.visible = false
+	)
+
+func _show_own_profile_popup() -> void:
+	var data = {
+		"name": PlayerData.player_name,
+		"elo_bullet": PlayerData.elo_bullet,
+		"elo_blitz":  PlayerData.elo_blitz,
+		"elo_rapid":  PlayerData.elo_rapid,
+		"solo_highscore": PlayerData.solo_highscore,
+		"total_games": PlayerData.total_games,
+		"wins": PlayerData.wins,
+		"losses": PlayerData.losses,
+		"draws": PlayerData.draws,
+		"wins_bullet": PlayerData.wins_bullet, "losses_bullet": PlayerData.losses_bullet, "draws_bullet": PlayerData.draws_bullet,
+		"wins_blitz":  PlayerData.wins_blitz,  "losses_blitz":  PlayerData.losses_blitz,  "draws_blitz":  PlayerData.draws_blitz,
+		"wins_rapid":  PlayerData.wins_rapid,  "losses_rapid":  PlayerData.losses_rapid,  "draws_rapid":  PlayerData.draws_rapid,
+		"matches": PlayerData.matches,
+		"player_id": PlayerData.player_id
+	}
+	_show_profile_popup(data, true, "bullet")
+
+func _show_profile_popup(data: Dictionary, is_own: bool = false, start_mode: String = "bullet") -> void:
+	for child in profile_popup.get_children():
+		if child.name != "PopupBG":
+			child.queue_free()
+	profile_popup.visible = true
+
+	var center = CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	profile_popup.add_child(center)
+
+	var card = PanelContainer.new()
+	card.custom_minimum_size = Vector2(540, 0)
+	var cs = StyleBoxFlat.new()
+	cs.bg_color = Color(0.06, 0.07, 0.12)
+	cs.set_corner_radius_all(18)
+	cs.border_color = Color(0.28, 0.32, 0.52)
+	cs.set_border_width_all(2)
+	cs.set_content_margin_all(32)
+	card.add_theme_stylebox_override("panel", cs)
+	center.add_child(card)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	card.add_child(vbox)
+
+	# ── Name ──
+	var name_lbl = Label.new()
+	name_lbl.text = data.get("name", "???")
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.add_theme_font_size_override("font_size", 42)
+	name_lbl.add_theme_color_override("font_color", Color.WHITE)
+	vbox.add_child(name_lbl)
+
+	# ── Name-change (own profile only) ──
+	if is_own:
+		var name_row = HBoxContainer.new()
+		name_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		name_row.add_theme_constant_override("separation", 10)
+		vbox.add_child(name_row)
+
+		var name_edit = LineEdit.new()
+		name_edit.text = data.get("name", "")
+		name_edit.placeholder_text = "Type new name..."
+		name_edit.max_length = 16
+		name_edit.virtual_keyboard_enabled = true
+		name_edit.editable = true
+		name_edit.caret_blink = true
+		name_edit.custom_minimum_size = Vector2(240, 46)
+		name_edit.add_theme_font_size_override("font_size", 20)
+		var ne_s = StyleBoxFlat.new()
+		ne_s.bg_color = Color(0.1, 0.1, 0.18)
+		ne_s.set_corner_radius_all(10)
+		ne_s.set_border_width_all(2)
+		ne_s.border_color = Color(0.35, 0.45, 0.75)
+		ne_s.set_content_margin_all(10)
+		name_edit.add_theme_stylebox_override("normal", ne_s)
+		name_edit.add_theme_stylebox_override("focus",  ne_s)
+		name_row.add_child(name_edit)
+
+		var confirm_btn = Button.new()
+		confirm_btn.text = "✓ SAVE"
+		confirm_btn.custom_minimum_size = Vector2(110, 46)
+		confirm_btn.add_theme_font_size_override("font_size", 18)
+		var cb_s = StyleBoxFlat.new()
+		cb_s.bg_color = Color(0.08, 0.28, 0.14)
+		cb_s.set_corner_radius_all(10)
+		cb_s.border_color = Color(0.25, 0.75, 0.4)
+		cb_s.set_border_width_all(2)
+		cb_s.set_content_margin_all(8)
+		confirm_btn.add_theme_stylebox_override("normal", cb_s)
+		var cb_h = cb_s.duplicate() as StyleBoxFlat
+		cb_h.bg_color = Color(0.12, 0.38, 0.2)
+		confirm_btn.add_theme_stylebox_override("hover",   cb_h)
+		confirm_btn.add_theme_stylebox_override("pressed", cb_h)
+		confirm_btn.add_theme_stylebox_override("focus",   StyleBoxEmpty.new())
+		confirm_btn.add_theme_color_override("font_color", Color(0.45, 1.0, 0.6))
+		confirm_btn.pressed.connect(func():
+			var new_name = name_edit.text.strip_edges()
+			if new_name.is_empty():
+				return
+			PlayerData.set_player_name(new_name)
+			name_lbl.text = new_name
+			_update_profile_sidebar()
+		)
+		name_edit.text_submitted.connect(func(_t): confirm_btn.emit_signal("pressed"))
+		name_row.add_child(confirm_btn)
+
+	_add_spacer(vbox, 4)
+
+	# ── Thin divider ──
+	var div = ColorRect.new()
+	div.custom_minimum_size = Vector2(0, 1)
+	div.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	div.color = Color(0.22, 0.25, 0.4, 0.7)
+	vbox.add_child(div)
+
+	_add_spacer(vbox, 4)
+
+	# ── Mode tabs ──
+	var mode_tab_row = HBoxContainer.new()
+	mode_tab_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_tab_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(mode_tab_row)
+
+	var mode_tab_btns: Dictionary = {}
+
+	_add_spacer(vbox, 4)
+
+	# Stats container (rebuilt per tab)
+	var stats_vbox = VBoxContainer.new()
+	stats_vbox.add_theme_constant_override("separation", 6)
+	vbox.add_child(stats_vbox)
+
+	_add_spacer(vbox, 8)
+
+	# ── Solo section (always visible) ──
+	var sep_lbl = Label.new()
+	sep_lbl.text = "── SOLO SCORES ──"
+	sep_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sep_lbl.add_theme_font_size_override("font_size", 15)
+	sep_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.55))
+	vbox.add_child(sep_lbl)
+
+	var solo_vbox = VBoxContainer.new()
+	solo_vbox.add_theme_constant_override("separation", 6)
+	vbox.add_child(solo_vbox)
+	_add_profile_stat(solo_vbox, "Best Score",  str(int(data.get("solo_highscore", 0))), Color(0.9, 0.8, 0.35))
+	_add_profile_stat(solo_vbox, "Total Games", str(int(data.get("total_games", 0))),     Color(0.6, 0.6, 0.75))
+
+	_add_spacer(vbox, 8)
+
+	# ── Match history header + list (rebuilt per tab) ──
+	var hist_hdr = Label.new()
+	hist_hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hist_hdr.add_theme_font_size_override("font_size", 15)
+	hist_hdr.add_theme_color_override("font_color", Color(0.4, 0.4, 0.55))
+	vbox.add_child(hist_hdr)
+
+	var hist_vbox = VBoxContainer.new()
+	hist_vbox.add_theme_constant_override("separation", 4)
+	vbox.add_child(hist_vbox)
+
+	_add_spacer(vbox, 10)
+	var close_hint = Label.new()
+	close_hint.text = "ESC or click outside to close"
+	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	close_hint.add_theme_font_size_override("font_size", 14)
+	close_hint.add_theme_color_override("font_color", Color(0.3, 0.3, 0.42))
+	vbox.add_child(close_hint)
+
+	# Refresh function
+	var refresh_fn = func(mode: String) -> void:
+		for m in mode_tab_btns:
+			_style_profile_tab_btn(mode_tab_btns[m], m == mode)
+		for c in stats_vbox.get_children(): c.queue_free()
+		_build_profile_stats(mode, data, stats_vbox)
+		var icons = {"bullet": "🔫", "blitz": "⚡", "rapid": "⏱"}
+		hist_hdr.text = "── " + icons.get(mode, "") + "  " + mode.to_upper() + " MATCHES ──"
+		for c in hist_vbox.get_children(): c.queue_free()
+		_build_profile_history(mode, data, hist_vbox)
+
+	for tab_mode in ["bullet", "blitz", "rapid"]:
+		var icons = {"bullet": "🔫 BULLET", "blitz": "⚡ BLITZ", "rapid": "⏱ RAPID"}
+		var tab_btn = _create_profile_tab_btn(icons[tab_mode])
+		var cm = tab_mode
+		tab_btn.pressed.connect(func():
+			SoundManager.play("click")
+			refresh_fn.call(cm)
+		)
+		mode_tab_row.add_child(tab_btn)
+		mode_tab_btns[tab_mode] = tab_btn
+
+	refresh_fn.call(start_mode)
+
+func _build_profile_stats(mode: String, data: Dictionary, sv: VBoxContainer) -> void:
+	var legacy = int(data.get("elo", 1000))
+	var elo = int(data.get("elo_" + mode, legacy if mode == "bullet" else 1000))
+	var w   = int(data.get("wins_"   + mode, data.get("wins", 0)))
+	var l   = int(data.get("losses_" + mode, data.get("losses", 0)))
+	var d   = int(data.get("draws_"  + mode, data.get("draws", 0)))
+	var total = w + l + d
+	var wr = ("%.1f" % (float(w) / float(total) * 100.0)) + "%" if total > 0 else "—"
+	var accent = Color(0.95, 0.78, 0.1) if mode == "bullet" else \
+				 (Color(0.2, 0.65, 1.0) if mode == "blitz" else Color(0.2, 0.9, 0.45))
+	_add_profile_stat(sv, "ELO",      str(elo), accent)
+	_add_profile_stat(sv, "Wins",     str(w),   Color(0.35, 0.92, 0.5))
+	_add_profile_stat(sv, "Losses",   str(l),   Color(0.92, 0.35, 0.35))
+	_add_profile_stat(sv, "Draws",    str(d),   Color(0.85, 0.85, 0.45))
+	_add_profile_stat(sv, "Win Rate", wr,       Color(0.6, 0.6, 0.75))
+
+func _build_profile_history(mode: String, data: Dictionary, hv: VBoxContainer) -> void:
+	var match_list = data.get("matches", [])
+	if match_list == null or not match_list is Array:
+		match_list = []
+	var filtered: Array = []
+	for m in match_list:
+		if m is Dictionary and m.get("time_mode", "bullet") == mode:
+			filtered.append(m)
+	filtered.reverse()
+	var count = mini(filtered.size(), 6)
+	if count == 0:
+		var lbl = Label.new()
+		lbl.text = "No matches yet in this mode."
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.add_theme_color_override("font_color", Color(0.38, 0.38, 0.5))
+		hv.add_child(lbl)
+		return
+	for i in count:
+		var m = filtered[i]
+		var res = m.get("result", "?")
+		var ec = m.get("elo_change", 0)
+		var ec_str = ("+" if ec >= 0 else "") + str(ec)
+		var col = Color(0.35, 0.9, 0.5) if res == "win" else \
+				  (Color(0.9, 0.32, 0.32) if res == "lose" else Color(0.8, 0.8, 0.42))
+		var row = PanelContainer.new()
+		var rs = StyleBoxFlat.new()
+		rs.bg_color = Color(col.r, col.g, col.b, 0.06)
+		rs.set_corner_radius_all(8)
+		rs.border_color = Color(col.r, col.g, col.b, 0.3)
+		rs.set_border_width_all(1)
+		rs.set_content_margin_all(8)
+		row.add_theme_stylebox_override("panel", rs)
+		var lbl = Label.new()
+		lbl.text = res.to_upper() + "   " + str(m.get("my_score", 0)) + " – " + \
+				   str(m.get("opp_score", 0)) + "   vs " + m.get("opponent", "???") + \
+				   "   (" + ec_str + " ELO)"
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.add_theme_color_override("font_color", col)
+		row.add_child(lbl)
+		hv.add_child(row)
+
+func _add_profile_stat(parent: VBoxContainer, label: String, value: String, color: Color) -> void:
+	var hbox = HBoxContainer.new()
+	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	hbox.add_theme_constant_override("separation", 12)
+	hbox.custom_minimum_size = Vector2(0, 32)
+	parent.add_child(hbox)
+	var key = Label.new()
+	key.text = label + ":"
+	key.add_theme_font_size_override("font_size", 19)
+	key.add_theme_color_override("font_color", Color(0.48, 0.48, 0.62))
+	key.custom_minimum_size = Vector2(150, 0)
+	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hbox.add_child(key)
+	var val = Label.new()
+	val.text = value
+	val.add_theme_font_size_override("font_size", 20)
+	val.add_theme_color_override("font_color", color)
+	val.custom_minimum_size = Vector2(160, 0)
+	hbox.add_child(val)
+
+func _create_profile_tab_btn(label: String) -> Button:
+	var btn = Button.new()
+	btn.text = label
+	btn.custom_minimum_size = Vector2(130, 48)
+	btn.add_theme_font_size_override("font_size", 17)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_style_profile_tab_btn(btn, false)
+	return btn
+
+func _style_profile_tab_btn(btn: Button, is_active: bool) -> void:
+	var s = StyleBoxFlat.new()
+	s.set_corner_radius_all(10)
+	s.set_content_margin_all(6)
+	if is_active:
+		s.bg_color = Color(0.12, 0.2, 0.38)
+		s.border_color = Color(0.35, 0.62, 1.0)
+		s.set_border_width_all(2)
+		btn.add_theme_color_override("font_color", Color(0.55, 0.85, 1.0))
+	else:
+		s.bg_color = Color(0.09, 0.09, 0.14)
+		s.border_color = Color(0.22, 0.22, 0.32)
+		s.set_border_width_all(1)
+		btn.add_theme_color_override("font_color", Color(0.4, 0.4, 0.52))
+	btn.add_theme_stylebox_override("normal", s)
+	var h = s.duplicate() as StyleBoxFlat
+	h.bg_color = s.bg_color.lightened(0.09)
+	h.border_color = s.border_color.lightened(0.12)
+	btn.add_theme_stylebox_override("hover", h)
+	btn.add_theme_stylebox_override("pressed", h)
