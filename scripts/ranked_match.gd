@@ -36,6 +36,8 @@ var _is_spectating: bool = false
 @onready var opp_panel: PanelContainer      = $MatchHUD/OppPanel
 @onready var opponent_score_label: Label    = $MatchHUD/OppPanel/VBox/OppScoreLabel
 @onready var opp_name_label: Label          = $MatchHUD/OppPanel/VBox/OppNameLabel
+@onready var my_king_rect: TextureRect      = $MatchHUD/MyPanel/VBox/MyKingRect
+@onready var opp_king_rect: TextureRect     = $MatchHUD/OppPanel/VBox/OppKingRect
 @onready var countdown_label: Label         = $MatchHUD/CountdownLabel
 
 # === LOBBY ===
@@ -69,6 +71,7 @@ func _ready() -> void:
 	player.is_dead = true
 
 	_apply_styles()
+	$MatchHUD/MyPanel/VBox/MyNameLabel.text = PlayerData.player_name
 	back_button.pressed.connect(_on_back_button_pressed)
 	_connect_signals()
 
@@ -182,30 +185,64 @@ func _on_challenge_failed(msg: String) -> void:
 # =====================
 
 func _apply_styles() -> void:
-	var my_color := Color(0.0, 0.8, 0.4)
+	# ── MY panel (green) ──
+	var my_color := Color(0.0, 1.0, 0.5)
 	var my_style := StyleBoxFlat.new()
-	my_style.bg_color = Color(0.0, 0.8, 0.4, 0.15)
-	my_style.set_corner_radius_all(8)
-	my_style.set_content_margin_all(8)
-	my_style.border_color = my_color.darkened(0.3)
-	my_style.border_color.a = 0.4
-	my_style.set_border_width_all(1)
+	my_style.bg_color = Color(0.0, 0.6, 0.3, 0.13)
+	my_style.set_corner_radius_all(12)
+	my_style.set_content_margin_all(10)
+	my_style.border_color = Color(0.0, 1.0, 0.5, 0.65)
+	my_style.set_border_width_all(2)
 	my_panel.add_theme_stylebox_override("panel", my_style)
+
 	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_color_override("font_color", my_color.darkened(0.1))
-	$MatchHUD/MyPanel/VBox/MyScoreLabel.add_theme_color_override("font_color", my_color)
+	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_font_size_override("font_size", 14)
+	$MatchHUD/MyPanel/VBox.add_theme_constant_override("separation", 4)
 
-	var opp_color := Color(1.0, 0.4, 0.4)
+	var my_ls := LabelSettings.new()
+	my_ls.font_size = 72
+	my_ls.font_color = my_color
+	my_ls.outline_size = 3
+	my_ls.outline_color = Color(0.0, 0.25, 0.12)
+	my_ls.shadow_color = Color(my_color.r, my_color.g, my_color.b, 0.55)
+	my_ls.shadow_size = 10
+	my_ls.shadow_offset = Vector2.ZERO
+	my_score_label.label_settings = my_ls
+
+	my_king_rect.texture = load(GameSettings.get_player_king_texture())
+	my_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	my_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
+	# ── OPP panel (red-orange) ──
+	var opp_color := Color(1.0, 0.38, 0.2)
 	var opp_style := StyleBoxFlat.new()
-	opp_style.bg_color = Color(1.0, 0.3, 0.3, 0.15)
-	opp_style.set_corner_radius_all(8)
-	opp_style.set_content_margin_all(8)
-	opp_style.border_color = opp_color.darkened(0.3)
-	opp_style.border_color.a = 0.4
-	opp_style.set_border_width_all(1)
+	opp_style.bg_color = Color(0.7, 0.15, 0.0, 0.13)
+	opp_style.set_corner_radius_all(12)
+	opp_style.set_content_margin_all(10)
+	opp_style.border_color = Color(1.0, 0.38, 0.2, 0.65)
+	opp_style.set_border_width_all(2)
 	opp_panel.add_theme_stylebox_override("panel", opp_style)
-	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_color_override("font_color", opp_color.darkened(0.1))
-	$MatchHUD/OppPanel/VBox/OppScoreLabel.add_theme_color_override("font_color", opp_color)
 
+	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_color_override("font_color", opp_color.darkened(0.1))
+	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_font_size_override("font_size", 14)
+	$MatchHUD/OppPanel/VBox.add_theme_constant_override("separation", 4)
+
+	var opp_ls := LabelSettings.new()
+	opp_ls.font_size = 72
+	opp_ls.font_color = opp_color
+	opp_ls.outline_size = 3
+	opp_ls.outline_color = Color(0.3, 0.05, 0.0)
+	opp_ls.shadow_color = Color(opp_color.r, opp_color.g, opp_color.b, 0.55)
+	opp_ls.shadow_size = 10
+	opp_ls.shadow_offset = Vector2.ZERO
+	opponent_score_label.label_settings = opp_ls
+
+	var opp_tex_path: String = "res://assets/king1.png" if GameSettings.player_is_white else "res://assets/king.png"
+	opp_king_rect.texture = load(opp_tex_path)
+	opp_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	opp_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+
+	# ── Back button ──
 	var btn_normal := StyleBoxFlat.new()
 	btn_normal.bg_color = Color(0.1, 0.1, 0.15, 0.85)
 	btn_normal.set_corner_radius_all(12)
@@ -816,7 +853,7 @@ func _add_hint(parent: Control, text: String) -> void:
 	parent.add_child(lbl)
 
 func _pulse(node: Control, duration: float = 0.6) -> void:
-	var tween = create_tween()
+	var tween = node.create_tween()
 	tween.set_loops()
 	tween.tween_property(node, "modulate:a", 0.3, duration).set_trans(Tween.TRANS_SINE)
 	tween.tween_property(node, "modulate:a", 1.0, duration).set_trans(Tween.TRANS_SINE)

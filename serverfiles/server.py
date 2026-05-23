@@ -238,6 +238,11 @@ async def handler(ws):
                     await _handle_challenge(player, data)
                 elif t == "score_update":
                     await _handle_score(player, data)
+                elif t == "ghost_pos":
+                    m = player.match
+                    if m and not m.ended:
+                        opp = m.p2 if player == m.p1 else m.p1
+                        await _send(opp.ws, {"type": "opponent_ghost", "x": data.get("x", 0), "y": data.get("y", 0)})
                 elif t == "match_end":
                     await _handle_match_end(player, data)
                 elif t == "rejoin_lobby":

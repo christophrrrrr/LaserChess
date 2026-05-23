@@ -170,3 +170,5 @@ func _handle_message(text: String) -> void:
 			challenge_failed.emit(data.get("msg", "Player unavailable"))
 		"opponent_ghost":
 			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))
+		"ghost_pos":
+			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))
