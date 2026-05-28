@@ -4,13 +4,12 @@ extends Node
 
 @export_group("Difficulty Curve")
 @export var base_interval: float = 2.8  ## Starting interval between spawns
-@export var min_interval: float = 0.8   ## Absolute fastest spawn rate
-@export var difficulty_scale: float = 0.5  ## How much log() affects interval
-@export var difficulty_curve: float = 0.12  ## How quickly the curve bends
+@export var min_interval: float = 0.8   ## Floor — interval approaches but never goes below this
+@export var difficulty_curve: float = 0.006  ## Exponential decay rate per point (higher = faster ramp)
 
 @export_group("Multi-Hazard")
 @export var max_hazards_per_spawn: int = 4  ## Max simultaneous hazards
-@export var score_per_extra_hazard: int = 18  ## Score per additional hazard (sqrt-based)
+@export var score_per_extra_hazard: int = 24  ## Score per additional hazard (sqrt-based)
 
 var game_board: Node2D
 var spawn_timer: Timer
@@ -31,8 +30,9 @@ func _ready() -> void:
 
 func _get_current_interval() -> float:
 	var s = game_board.score
-	var interval = base_interval - difficulty_scale * log(1.0 + s * difficulty_curve)
-	return max(min_interval, interval)
+	# Exponential decay: starts at base_interval, asymptotically approaches min_interval.
+	# No clamp needed — exp() naturally keeps interval above min_interval.
+	return min_interval + (base_interval - min_interval) * exp(-difficulty_curve * s)
 
 func _get_hazards_per_spawn() -> int:
 	var s = game_board.score

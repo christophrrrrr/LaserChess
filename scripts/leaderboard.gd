@@ -7,6 +7,8 @@ var scroll_content: VBoxContainer
 var profile_popup: Control
 var loading_label: Label
 var back_button_layer: CanvasLayer
+var _scroll: ScrollContainer = null
+var _profile_scroll: ScrollContainer = null
 
 var _all_players: Array = []
 var _active_tab: String = "solo"
@@ -44,39 +46,66 @@ func _setup_ui() -> void:
 	hud.layer = 10
 	add_child(hud)
 
+	# Compute safe-area top offset once (pushes all near-top UI below notch/status bar)
+	var safe_top := 0
+	if GameSettings.is_mobile:
+		var r := DisplayServer.get_display_safe_area()
+		safe_top = maxi(r.position.y, 72)
+
 	# Background
 	var bg = ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.03, 0.03, 0.08, 0.95)
 	hud.add_child(bg)
 
+	# Header background strip + bottom divider
+	var header_h := 230 + safe_top if GameSettings.is_mobile else 192
+	var header_bg = ColorRect.new()
+	header_bg.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	header_bg.offset_bottom = float(header_h)
+	header_bg.color = Color(0.04, 0.05, 0.11, 1.0)
+	hud.add_child(header_bg)
+
+	var header_divider = ColorRect.new()
+	header_divider.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	header_divider.offset_top = float(header_h)
+	header_divider.offset_bottom = float(header_h + 1)
+	header_divider.color = Color(0.22, 0.22, 0.38, 0.5)
+	hud.add_child(header_divider)
+
 	# Title
 	var title = Label.new()
 	title.text = "LEADERBOARD"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.position = Vector2(-120, 20)
+	title.position = Vector2(-120, 16 + safe_top)
 	title.custom_minimum_size = Vector2(240, 0)
 	title.add_theme_font_size_override("font_size", 38)
 	title.add_theme_color_override("font_color", Color(0.85, 0.55, 0.1))
 	hud.add_child(title)
 
-	# ESC hint
-	var esc = Label.new()
-	esc.text = "ESC to go back"
-	esc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	esc.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	esc.position = Vector2(-80, -30)
-	esc.custom_minimum_size = Vector2(160, 0)
-	esc.add_theme_font_size_override("font_size", 15)
-	esc.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
-	hud.add_child(esc)
+	# ESC hint (hidden on mobile — no keyboard)
+	if not GameSettings.is_mobile:
+		var esc = Label.new()
+		esc.text = "ESC to go back"
+		esc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		esc.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		esc.position = Vector2(-80, -30)
+		esc.custom_minimum_size = Vector2(160, 0)
+		esc.add_theme_font_size_override("font_size", 15)
+		esc.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
+		hud.add_child(esc)
 
 	# Tab buttons (Solo first = default)
+	# On mobile: larger tap targets; on PC: compact chip buttons
 	var tab_row = HBoxContainer.new()
 	tab_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	tab_row.position = Vector2(-114, 68)
-	tab_row.custom_minimum_size = Vector2(228, 36)
+	if GameSettings.is_mobile:
+		tab_row.position = Vector2(-170, 76 + safe_top)
+		tab_row.custom_minimum_size = Vector2(340, 64)
+	else:
+		tab_row.position = Vector2(-136, 72)
+		tab_row.custom_minimum_size = Vector2(272, 48)
 	tab_row.add_theme_constant_override("separation", 8)
 
 	_solo_tab_btn = _create_tab_button("SOLO SCORES", true)
@@ -90,10 +119,21 @@ func _setup_ui() -> void:
 	# ELO sub-mode row (Bullet / Blitz / Rapid chips)
 	_elo_mode_row = HBoxContainer.new()
 	_elo_mode_row.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_elo_mode_row.position = Vector2(-120, 112)
-	_elo_mode_row.custom_minimum_size = Vector2(240, 30)
+	if GameSettings.is_mobile:
+		_elo_mode_row.position = Vector2(-170, 152 + safe_top)
+		_elo_mode_row.custom_minimum_size = Vector2(340, 64)
+	else:
+		_elo_mode_row.position = Vector2(-160, 132)
+		_elo_mode_row.custom_minimum_size = Vector2(320, 40)
 	_elo_mode_row.add_theme_constant_override("separation", 8)
 	_elo_mode_row.visible = false
+
+	var mode_lbl = Label.new()
+	mode_lbl.text = "MODE :"
+	mode_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	mode_lbl.add_theme_font_size_override("font_size", 12 if not GameSettings.is_mobile else 16)
+	mode_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.55))
+	_elo_mode_row.add_child(mode_lbl)
 
 	_bullet_btn = _create_elo_mode_button("🔫 BULLET")
 	_bullet_btn.pressed.connect(_on_elo_mode.bind("bullet"))
@@ -110,10 +150,14 @@ func _setup_ui() -> void:
 	# Scroll container for the list
 	var scroll_wrap = MarginContainer.new()
 	scroll_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll_wrap.add_theme_constant_override("margin_top", 115)
-	scroll_wrap.add_theme_constant_override("margin_bottom", 50)
-	scroll_wrap.add_theme_constant_override("margin_left", 40)
-	scroll_wrap.add_theme_constant_override("margin_right", 40)
+	# Extra top margin on mobile to clear the bigger tab+elo rows, plus safe area
+	scroll_wrap.add_theme_constant_override("margin_top",    234 + safe_top if GameSettings.is_mobile else 196)
+	scroll_wrap.add_theme_constant_override("margin_bottom", 70  if GameSettings.is_mobile else 50)
+	# Desktop: center content in ~720px column; mobile: small fixed padding
+	var vp_x := int(get_viewport().get_visible_rect().size.x)
+	var side_margin := 24 if GameSettings.is_mobile else maxi(40, (vp_x - 720) / 2)
+	scroll_wrap.add_theme_constant_override("margin_left",  side_margin)
+	scroll_wrap.add_theme_constant_override("margin_right", side_margin)
 	hud.add_child(scroll_wrap)
 
 	# Add rows last so they sit on top for input
@@ -124,10 +168,11 @@ func _setup_ui() -> void:
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll_wrap.add_child(scroll)
+	_scroll = scroll
 
 	scroll_content = VBoxContainer.new()
 	scroll_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll_content.add_theme_constant_override("separation", 4)
+	scroll_content.add_theme_constant_override("separation", 6)
 	scroll.add_child(scroll_content)
 
 	# Loading label
@@ -169,7 +214,6 @@ func _on_leaderboard_loaded(players: Array) -> void:
 
 func _display_players() -> void:
 	for child in scroll_content.get_children():
-		scroll_content.remove_child(child)
 		child.queue_free()
 
 	if _all_players.is_empty():
@@ -187,7 +231,7 @@ func _display_players() -> void:
 	if _active_tab == "elo":
 		sorted.sort_custom(func(a, b): return a.get(elo_field, 0) > b.get(elo_field, 0))
 		var mode_label = _active_elo_mode.to_upper() + " ELO"
-		var header = _create_row_hbox("#", "Name", mode_label, "Record", Color(0.45, 0.45, 0.55), 14, false, "")
+		var header = _create_row_hbox("#", "Name", mode_label, "Record", Color(0.45, 0.45, 0.55), 20 if GameSettings.is_mobile else 16, false, "")
 		scroll_content.add_child(header)
 		scroll_content.add_child(_make_sep())
 		for i in sorted.size():
@@ -196,7 +240,7 @@ func _display_players() -> void:
 			scroll_content.add_child(_create_player_row(i + 1, p, is_me, elo_field))
 	else:
 		sorted.sort_custom(func(a, b): return a.get("solo_highscore", 0) > b.get("solo_highscore", 0))
-		var header = _create_solo_row_hbox("#", "Name", "Best Score", Color(0.45, 0.45, 0.55), 14)
+		var header = _create_solo_row_hbox("#", "Name", "Best Score", Color(0.45, 0.45, 0.55), 20 if GameSettings.is_mobile else 16)
 		scroll_content.add_child(header)
 		scroll_content.add_child(_make_sep())
 		for i in sorted.size():
@@ -245,8 +289,13 @@ func _update_elo_mode_buttons() -> void:
 func _create_elo_mode_button(label: String) -> Button:
 	var btn = Button.new()
 	btn.text = label
-	btn.custom_minimum_size = Vector2(76, 28)
-	btn.add_theme_font_size_override("font_size", 12)
+	if GameSettings.is_mobile:
+		btn.custom_minimum_size = Vector2(0, 64)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", 20)
+	else:
+		btn.custom_minimum_size = Vector2(76, 40)
+		btn.add_theme_font_size_override("font_size", 16)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_style_elo_mode_button(btn, false)
 	return btn
@@ -274,8 +323,13 @@ func _style_elo_mode_button(btn: Button, is_active: bool) -> void:
 func _create_tab_button(label: String, is_active: bool) -> Button:
 	var btn = Button.new()
 	btn.text = label
-	btn.custom_minimum_size = Vector2(110, 34)
-	btn.add_theme_font_size_override("font_size", 14)
+	if GameSettings.is_mobile:
+		btn.custom_minimum_size = Vector2(0, 64)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", 22)
+	else:
+		btn.custom_minimum_size = Vector2(128, 48)
+		btn.add_theme_font_size_override("font_size", 18)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_style_tab_button(btn, is_active)
 	return btn
@@ -321,6 +375,8 @@ func _create_row_hbox(rank_text: String, name_text: String, elo_text: String,
 	var name_lbl = Label.new()
 	name_lbl.text = name_text
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lbl.add_theme_font_size_override("font_size", font_size)
 	name_lbl.add_theme_color_override("font_color", text_color)
 	hbox.add_child(name_lbl)
@@ -355,9 +411,12 @@ func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: Str
 	var pid = data.get("player_id", "")
 	var record_str = str(w) + "W " + str(l) + "L " + str(d_val) + "D"
 
+	var row_h := 64 if GameSettings.is_mobile else 44
+	var row_font := 22 if GameSettings.is_mobile else 18
+
 	var btn = Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 36)
+	btn.custom_minimum_size = Vector2(0, row_h)
 
 	# Style
 	var base_color = Color(0.1, 0.15, 0.1) if is_me else Color(0.08, 0.08, 0.12)
@@ -408,7 +467,7 @@ func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: Str
 	rank_lbl.custom_minimum_size = Vector2(50, 0)
 	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rank_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rank_lbl.add_theme_font_size_override("font_size", 16)
+	rank_lbl.add_theme_font_size_override("font_size", row_font)
 	rank_lbl.add_theme_color_override("font_color", text_color)
 	rank_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(rank_lbl)
@@ -418,7 +477,9 @@ func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: Str
 	name_lbl.text = name_str
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 16)
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.add_theme_font_size_override("font_size", row_font)
 	name_lbl.add_theme_color_override("font_color", text_color)
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(name_lbl)
@@ -429,21 +490,22 @@ func _create_player_row(rank: int, data: Dictionary, is_me: bool, elo_field: Str
 	elo_lbl.custom_minimum_size = Vector2(80, 0)
 	elo_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	elo_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	elo_lbl.add_theme_font_size_override("font_size", 16)
+	elo_lbl.add_theme_font_size_override("font_size", row_font)
 	elo_lbl.add_theme_color_override("font_color", text_color)
 	elo_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(elo_lbl)
 
-	# Record
-	var record_lbl = Label.new()
-	record_lbl.text = record_str
-	record_lbl.custom_minimum_size = Vector2(120, 0)
-	record_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	record_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	record_lbl.add_theme_font_size_override("font_size", 14)
-	record_lbl.add_theme_color_override("font_color", text_color.darkened(0.15))
-	record_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hbox.add_child(record_lbl)
+	# Record (hidden on mobile — not enough screen real-estate)
+	if not GameSettings.is_mobile:
+		var record_lbl = Label.new()
+		record_lbl.text = record_str
+		record_lbl.custom_minimum_size = Vector2(120, 0)
+		record_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		record_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		record_lbl.add_theme_font_size_override("font_size", 14)
+		record_lbl.add_theme_color_override("font_color", text_color.darkened(0.15))
+		record_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(record_lbl)
 
 	btn.pressed.connect(_on_leaderboard_player_clicked.bind(pid, name_str))
 	return btn
@@ -465,6 +527,8 @@ func _create_solo_row_hbox(rank_text: String, name_text: String, score_text: Str
 	var name_lbl = Label.new()
 	name_lbl.text = name_text
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lbl.add_theme_font_size_override("font_size", font_size)
 	name_lbl.add_theme_color_override("font_color", text_color)
 	hbox.add_child(name_lbl)
@@ -484,9 +548,12 @@ func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button
 	var score_val := data.get("solo_highscore", 0) as int
 	var pid := data.get("player_id", "") as String
 
+	var row_h    := 64 if GameSettings.is_mobile else 44
+	var row_font := 22 if GameSettings.is_mobile else 18
+
 	var btn = Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 36)
+	btn.custom_minimum_size = Vector2(0, row_h)
 
 	var base_color := Color(0.1, 0.15, 0.1) if is_me else Color(0.08, 0.08, 0.12)
 	var text_color := Color(0.5, 1.0, 0.6) if is_me else Color(0.85, 0.85, 0.9)
@@ -532,7 +599,7 @@ func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button
 	rank_lbl.custom_minimum_size = Vector2(50, 0)
 	rank_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	rank_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	rank_lbl.add_theme_font_size_override("font_size", 16)
+	rank_lbl.add_theme_font_size_override("font_size", row_font)
 	rank_lbl.add_theme_color_override("font_color", text_color)
 	rank_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(rank_lbl)
@@ -541,7 +608,9 @@ func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button
 	name_lbl.text = name_str
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 16)
+	name_lbl.clip_text = true
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.add_theme_font_size_override("font_size", row_font)
 	name_lbl.add_theme_color_override("font_color", text_color)
 	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(name_lbl)
@@ -551,7 +620,7 @@ func _create_solo_player_row(rank: int, data: Dictionary, is_me: bool) -> Button
 	score_lbl.custom_minimum_size = Vector2(120, 0)
 	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	score_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	score_lbl.add_theme_font_size_override("font_size", 16)
+	score_lbl.add_theme_font_size_override("font_size", row_font)
 	score_lbl.add_theme_color_override("font_color", text_color)
 	score_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(score_lbl)
@@ -618,33 +687,67 @@ func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = 
 	_clear_profile_popup()
 	profile_popup.visible = true
 
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.name = "Content"
-	profile_popup.add_child(center)
-
-	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(460, 0)
-	var card_style = StyleBoxFlat.new()
+	var card := PanelContainer.new()
+	var card_style := StyleBoxFlat.new()
 	card_style.bg_color = Color(0.06, 0.07, 0.12)
 	card_style.set_corner_radius_all(14)
 	card_style.border_color = Color(0.25, 0.28, 0.42)
 	card_style.set_border_width_all(2)
-	card_style.set_content_margin_all(24)
+	card_style.set_content_margin_all(20 if GameSettings.is_mobile else 24)
 	card.add_theme_stylebox_override("panel", card_style)
-	center.add_child(card)
 
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
-	card.add_child(vbox)
+	if GameSettings.is_mobile:
+		var r_lb := DisplayServer.get_display_safe_area()
+		var stp_lb: int = maxi(r_lb.position.y, 40)
+		var pm_lb := MarginContainer.new()
+		pm_lb.name = "Content"
+		pm_lb.set_anchors_preset(Control.PRESET_FULL_RECT)
+		pm_lb.add_theme_constant_override("margin_left",   20)
+		pm_lb.add_theme_constant_override("margin_right",  20)
+		pm_lb.add_theme_constant_override("margin_top",    stp_lb + 16)
+		pm_lb.add_theme_constant_override("margin_bottom", 20)
+		profile_popup.add_child(pm_lb)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		pm_lb.add_child(card)
+	else:
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		center.name = "Content"
+		profile_popup.add_child(center)
+		card.custom_minimum_size = Vector2(460, 0)
+		center.add_child(card)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10 if GameSettings.is_mobile else 4)
+	if GameSettings.is_mobile:
+		var scroll_lb := ScrollContainer.new()
+		scroll_lb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_lb.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		scroll_lb.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		card.add_child(scroll_lb)
+		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_lb.add_child(vbox)
+		_profile_scroll = scroll_lb
+	else:
+		card.add_child(vbox)
 
 	# ── Name ──
 	var name_lbl = Label.new()
 	name_lbl.text = data.get("name", "???")
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 30)
+	name_lbl.add_theme_font_size_override("font_size", 44 if GameSettings.is_mobile else 30)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(name_lbl)
+
+	# ── Solo score shown under name for quick preview ──
+	var hs_lb: int = int(data.get("solo_highscore", 0))
+	var score_sub_lb := Label.new()
+	score_sub_lb.text = "Best Score: " + (str(hs_lb) if hs_lb > 0 else "—")
+	score_sub_lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_sub_lb.add_theme_font_size_override("font_size", 24 if GameSettings.is_mobile else 16)
+	score_sub_lb.add_theme_color_override("font_color", Color(0.9, 0.78, 0.3))
+	vbox.add_child(score_sub_lb)
 
 	# ── Name-change row (own profile only) ──
 	if is_own:
@@ -658,14 +761,22 @@ func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = 
 		name_edit.text = data.get("name", "")
 		name_edit.placeholder_text = "New name..."
 		name_edit.max_length = 16
-		name_edit.custom_minimum_size = Vector2(180, 30)
-		name_edit.add_theme_font_size_override("font_size", 15)
+		if GameSettings.is_mobile:
+			name_edit.custom_minimum_size = Vector2(220, 56)
+			name_edit.add_theme_font_size_override("font_size", 24)
+		else:
+			name_edit.custom_minimum_size = Vector2(180, 30)
+			name_edit.add_theme_font_size_override("font_size", 15)
 		name_row.add_child(name_edit)
 
 		var confirm_btn = Button.new()
 		confirm_btn.text = "CONFIRM"
-		confirm_btn.custom_minimum_size = Vector2(90, 30)
-		confirm_btn.add_theme_font_size_override("font_size", 13)
+		if GameSettings.is_mobile:
+			confirm_btn.custom_minimum_size = Vector2(120, 56)
+			confirm_btn.add_theme_font_size_override("font_size", 22)
+		else:
+			confirm_btn.custom_minimum_size = Vector2(90, 30)
+			confirm_btn.add_theme_font_size_override("font_size", 13)
 		var cb_style = StyleBoxFlat.new()
 		cb_style.bg_color = Color(0.1, 0.3, 0.15)
 		cb_style.set_corner_radius_all(6)
@@ -710,7 +821,7 @@ func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = 
 	var sep_lbl = Label.new()
 	sep_lbl.text = "─── SOLO SCORES ───"
 	sep_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sep_lbl.add_theme_font_size_override("font_size", 12)
+	sep_lbl.add_theme_font_size_override("font_size", 18 if GameSettings.is_mobile else 12)
 	sep_lbl.add_theme_color_override("font_color", Color(0.35, 0.35, 0.5))
 	vbox.add_child(sep_lbl)
 	_add_spacer(vbox, 4)
@@ -723,7 +834,7 @@ func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = 
 	_add_spacer(vbox, 12)
 	var hist_header_lbl = Label.new()
 	hist_header_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hist_header_lbl.add_theme_font_size_override("font_size", 13)
+	hist_header_lbl.add_theme_font_size_override("font_size", 20 if GameSettings.is_mobile else 13)
 	hist_header_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.55))
 	vbox.add_child(hist_header_lbl)
 	_add_spacer(vbox, 4)
@@ -732,12 +843,33 @@ func _show_profile(data: Dictionary, is_own: bool = false, start_mode: String = 
 	vbox.add_child(hist_vbox)
 
 	_add_spacer(vbox, 14)
-	var close_hint = Label.new()
-	close_hint.text = "ESC or click outside to close"
-	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	close_hint.add_theme_font_size_override("font_size", 12)
-	close_hint.add_theme_color_override("font_color", Color(0.35, 0.35, 0.45))
-	vbox.add_child(close_hint)
+	if GameSettings.is_mobile:
+		var close_btn := Button.new()
+		close_btn.text = "CLOSE"
+		close_btn.custom_minimum_size = Vector2(0, 72)
+		close_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		close_btn.add_theme_font_size_override("font_size", 28)
+		close_btn.add_theme_color_override("font_color", Color.WHITE)
+		var cbs := StyleBoxFlat.new()
+		cbs.bg_color = Color(0.12, 0.12, 0.18)
+		cbs.set_corner_radius_all(10)
+		cbs.border_color = Color(0.35, 0.35, 0.50, 0.9)
+		cbs.set_border_width_all(2)
+		cbs.set_content_margin_all(8)
+		close_btn.add_theme_stylebox_override("normal", cbs)
+		var cbsh := cbs.duplicate() as StyleBoxFlat
+		cbsh.bg_color = Color(0.18, 0.18, 0.28)
+		close_btn.add_theme_stylebox_override("hover", cbsh)
+		close_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		close_btn.pressed.connect(func(): profile_popup.visible = false)
+		vbox.add_child(close_btn)
+	else:
+		var close_hint := Label.new()
+		close_hint.text = "ESC or click outside to close"
+		close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		close_hint.add_theme_font_size_override("font_size", 12)
+		close_hint.add_theme_color_override("font_color", Color(0.35, 0.35, 0.45))
+		vbox.add_child(close_hint)
 
 	# Helper: refresh the mode-specific sections
 	var refresh_mode_fn = func(mode: String) -> void:
@@ -799,11 +931,12 @@ func _build_match_history(mode: String, data: Dictionary, hist_vbox: VBoxContain
 			filtered.append(m)
 	filtered.reverse()
 	var count = mini(filtered.size(), 8)
+	var hist_font := 20 if GameSettings.is_mobile else 13
 	if count == 0:
 		var empty_lbl = Label.new()
 		empty_lbl.text = "No matches yet in this mode."
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		empty_lbl.add_theme_font_size_override("font_size", 13)
+		empty_lbl.add_theme_font_size_override("font_size", hist_font)
 		empty_lbl.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 		hist_vbox.add_child(empty_lbl)
 		return
@@ -822,7 +955,8 @@ func _build_match_history(mode: String, data: Dictionary, hist_vbox: VBoxContain
 		var lbl = Label.new()
 		lbl.text = text
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 13)
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.add_theme_font_size_override("font_size", hist_font)
 		lbl.add_theme_color_override("font_color", color)
 		hist_vbox.add_child(lbl)
 
@@ -832,31 +966,43 @@ func _add_stat_line(parent: VBoxContainer, label: String, value: String, color: 
 	hbox.add_theme_constant_override("separation", 10)
 	parent.add_child(hbox)
 
+	var key_font := 24 if GameSettings.is_mobile else 16
+	var val_font := 26 if GameSettings.is_mobile else 16
+	var row_h    := 40 if GameSettings.is_mobile else 0
+
 	var key = Label.new()
 	key.text = label + ":"
-	key.add_theme_font_size_override("font_size", 16)
+	key.add_theme_font_size_override("font_size", key_font)
 	key.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	key.custom_minimum_size = Vector2(130, 0)
+	key.custom_minimum_size = Vector2(130, row_h)
 	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hbox.add_child(key)
 
 	var val = Label.new()
 	val.text = value
-	val.add_theme_font_size_override("font_size", 16)
+	val.add_theme_font_size_override("font_size", val_font)
 	val.add_theme_color_override("font_color", color)
-	val.custom_minimum_size = Vector2(180, 0)
+	val.custom_minimum_size = Vector2(180, row_h)
 	hbox.add_child(val)
 
 func _clear_profile_popup() -> void:
 	for child in profile_popup.get_children():
 		if child.name == "PopupBG":
 			continue
-		profile_popup.remove_child(child)
 		child.queue_free()
 
 # =====================
 # INPUT
 # =====================
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenDrag:
+		if profile_popup != null and profile_popup.visible and _profile_scroll != null:
+			_profile_scroll.scroll_vertical -= int(event.relative.y)
+			get_viewport().set_input_as_handled()
+		elif _scroll != null:
+			_scroll.scroll_vertical -= int(event.relative.y)
+			get_viewport().set_input_as_handled()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -890,12 +1036,22 @@ func _setup_back_button() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	back_button_layer.add_child(root)
 	
+	var safe_top_back := 0
+	if GameSettings.is_mobile:
+		var r2 := DisplayServer.get_display_safe_area()
+		safe_top_back = maxi(r2.position.y, 72)
+
 	var btn = Button.new()
 	btn.text = "< BACK"  # ASCII compatible
 	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	btn.position = Vector2(20, 20)
-	btn.custom_minimum_size = Vector2(120, 60)
-	btn.add_theme_font_size_override("font_size", 22)
+	if GameSettings.is_mobile:
+		btn.position = Vector2(20, safe_top_back + 20)
+		btn.custom_minimum_size = Vector2(160, 80)
+		btn.add_theme_font_size_override("font_size", 28)
+	else:
+		btn.position = Vector2(20, 20)
+		btn.custom_minimum_size = Vector2(120, 60)
+		btn.add_theme_font_size_override("font_size", 22)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	_style_back_button(btn)
 	btn.pressed.connect(_on_back_button_pressed)

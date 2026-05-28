@@ -45,6 +45,9 @@ var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 # Separate seeded RNG — used only for HAZARD spawning so boards stay in sync
 var hazard_rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+# Concurrent pawn cap — grows with score (1 pawn per 100 pts, max 4)
+var _pawn_count: int = 0
+
 # Colors
 var color_floor_normal := Color(0.15, 0.15, 0.25)
 var color_floor_target := Color(0.0, 1.0, 0.6)
@@ -71,6 +74,7 @@ signal square_hit(is_wall: bool)
 signal square_missed
 signal score_changed(new_score: int)
 signal player_hit
+signal hazard_finished   # emitted when a hazard exits the board cleanly (not on reset)
 
 # Reference to player
 var player: Node2D
@@ -624,6 +628,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 		return
 
 	await _knight_squash(piece, base_scale)
+	SoundManager.play_pitched("bump", 0.55, 0.80)  # spawn landing thud
 
 	if is_resetting or not is_instance_valid(piece):
 		if is_instance_valid(piece): piece.queue_free()
@@ -662,15 +667,19 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 			active_hazards -= 1
 			return
 
-		await _knight_squash(piece, base_scale)
-
+		# Kill check fires the instant the knight visually lands — not after the squash
 		if player and not player.is_dead and not player.invincible:
 			if player.grid_pos == target_pos:
 				player_hit.emit()
 				player.die()
 
+		# Danger clears at landing — safe whether player died or dodged
 		_unmark_danger(target_pos, color_danger_knight)
 		current_pos = target_pos
+
+		# Squash + thud are purely visual — no gameplay effect past this point
+		await _knight_squash(piece, base_scale)
+		SoundManager.play_pitched("bump", 0.55, 0.80)
 
 		await get_tree().create_timer(knight_pause_between).timeout
 
@@ -684,6 +693,7 @@ func _execute_knight_hazard(start_pos: Vector2i) -> void:
 	fade_out.tween_callback(piece.queue_free)
 
 	active_hazards -= 1
+	hazard_finished.emit()
 
 func _knight_arc_jump(piece: Node2D, from: Vector2, to: Vector2) -> void:
 	var jump_height := 80.0
@@ -748,11 +758,12 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		active_hazards -= 1
 		return
 
-	# Animate piece through
+	# Animate piece through — danger clears progressively square by square
 	SoundManager.play("hazard_slide")
-	await _animate_sliding_piece(piece, positions)
+	await _animate_sliding_piece(piece, positions, danger_color)
 
 	if is_resetting or not is_instance_valid(piece):
+		# Safety net: unmark anything the slide didn't reach before is_resetting fired
 		for pos in positions:
 			_unmark_danger(pos, danger_color)
 		if is_instance_valid(piece):
@@ -760,50 +771,39 @@ func _execute_hazard_with_piece(positions: Array[Vector2i], texture: Texture2D, 
 		active_hazards -= 1
 		return
 
-	# Clear all danger
-	for pos in positions:
-		_unmark_danger(pos, danger_color)
-	
 	if is_instance_valid(piece):
 		var fade_out = create_tween()
 		fade_out.tween_property(piece, "modulate:a", 0.0, piece_fade_out_time)
 		fade_out.tween_callback(piece.queue_free)
-	
-	active_hazards -= 1
 
-func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void:
+	active_hazards -= 1
+	hazard_finished.emit()
+
+func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i], danger_color: Color = color_danger_rook) -> void:
 	for i in range(positions.size()):
 		if is_resetting or not is_instance_valid(piece):
 			return
-		
+
 		var pos = positions[i]
 		var target_world = grid_to_world(pos)
-		
+
 		if is_instance_valid(piece):
 			var move_tween = create_tween()
 			move_tween.tween_property(piece, "position", target_world, hazard_slide_speed).set_trans(Tween.TRANS_LINEAR)
-		
+
 		await get_tree().create_timer(hazard_slide_speed).timeout
-		
+
 		if is_resetting or not is_instance_valid(piece):
 			return
-		
-		# Flash the square white as piece passes
-		var square = get_floor_square(pos)
-		if square:
-			var rect = square.get_meta("rect") as ColorRect
-			var dc: Color = square.get_meta("danger_color") if square.has_meta("danger_color") else color_danger_rook
-			_stop_square_tween(square, "flash_tween")
-			rect.color = Color.WHITE
-			var flash_tween = create_tween()
-			flash_tween.tween_property(rect, "color", dc, hazard_flash_duration)
-			square.set_meta("flash_tween", flash_tween)
-		
-		# Check collision AFTER piece has arrived
+
+		# Check collision the instant the piece arrives
 		if player and not player.is_dead and not player.invincible:
 			if player.grid_pos == pos:
 				player_hit.emit()
 				player.die()
+
+		# Square is now safe — clear danger immediately as piece passes through
+		_unmark_danger(pos, danger_color)
 	
 	# Exit animation
 	if positions.size() >= 2 and is_instance_valid(piece):
@@ -820,7 +820,12 @@ func _animate_sliding_piece(piece: Sprite2D, positions: Array[Vector2i]) -> void
 # PAWN HAZARD
 # =====================
 
+func _max_concurrent_pawns() -> int:
+	return min(1 + score / 100, 4)
+
 func spawn_pawn_hazard() -> void:
+	if _pawn_count >= _max_concurrent_pawns():
+		return  # cap reached — pawns linger too long to stack freely
 	var col := hazard_rng.randi() % grid_size
 	var moving_down := hazard_rng.randf() < 0.5
 	_execute_pawn_hazard(col, moving_down)
@@ -829,6 +834,7 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 	if is_resetting:
 		return
 
+	_pawn_count += 1
 	active_hazards += 1
 
 	# Sprite glows red so the piece reads as dangerous even with yellow floor squares
@@ -847,6 +853,7 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 
 	if is_resetting or not is_instance_valid(piece):
 		if is_instance_valid(piece): piece.queue_free()
+		_pawn_count -= 1
 		active_hazards -= 1
 		return
 
@@ -856,6 +863,7 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 
 	if is_resetting or not is_instance_valid(piece):
 		if is_instance_valid(piece): piece.queue_free()
+		_pawn_count -= 1
 		active_hazards -= 1
 		return
 
@@ -864,19 +872,22 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 	while true:
 		if is_resetting or not is_instance_valid(piece):
 			if is_instance_valid(piece): piece.queue_free()
+			_pawn_count -= 1
 			active_hazards -= 1
 			return
 
 		current_row += step_dir
 
 		# Slide to next square
+		SoundManager.play_pitched("hazard_slide", 1.8, 2.2, -6.0)  # short pitched-up slide (1 square, quieter)
 		var target_world = grid_to_world(Vector2i(col, current_row))
 		var slide = create_tween()
-		slide.tween_property(piece, "position", target_world, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+		slide.tween_property(piece, "position", target_world, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 		await slide.finished
 
 		if is_resetting or not is_instance_valid(piece):
 			if is_instance_valid(piece): piece.queue_free()
+			_pawn_count -= 1
 			active_hazards -= 1
 			return
 
@@ -889,13 +900,14 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 		for d in diagonals:
 			_mark_danger(d, color_danger_pawn)
 
-		col = await _pawn_dwell_watch(piece, col, diagonals, 1.0, 0.5)
+		col = await _pawn_dwell_watch(piece, col, diagonals, 1.5, 0.7)
 
 		for d in diagonals:
 			_unmark_danger(d, color_danger_pawn)
 
 		if is_resetting:
 			if is_instance_valid(piece): piece.queue_free()
+			_pawn_count -= 1
 			active_hazards -= 1
 			return
 
@@ -905,7 +917,9 @@ func _execute_pawn_hazard(col: int, moving_down: bool) -> void:
 		fade_out.tween_property(piece, "modulate:a", 0.0, piece_fade_out_time)
 		fade_out.tween_callback(piece.queue_free)
 
+	_pawn_count -= 1
 	active_hazards -= 1
+	hazard_finished.emit()
 
 func _get_pawn_diagonals(col: int, row: int, moving_down: bool) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
@@ -944,7 +958,7 @@ func _pawn_dwell_watch(piece: Node2D, start_col: int, diagonals: Array[Vector2i]
 
 			# Player is on diagonal — pawn lunges!
 			is_lunging = true
-			SoundManager.play("warning")
+			SoundManager.play_pitched("hazard_slide", 1.8, 2.2, -4.0)  # diagonal lunge (1 square, quieter)
 
 			var lunge = create_tween()
 			lunge.tween_property(piece, "position", grid_to_world(d), lunge_duration) \
@@ -987,7 +1001,8 @@ func spawn_random_hazard() -> void:
 
 func reset() -> void:
 	is_resetting = true
-	
+	_pawn_count = 0
+
 	score = 0
 	score_changed.emit(score)
 	

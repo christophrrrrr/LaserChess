@@ -17,6 +17,7 @@ var fade_rect: ColorRect
 
 # === STATE ===
 var _transitioning := false
+var _pulse_tween: Tween = null
 
 # === FLOATING BG ===
 var _bg_pieces: Array = []
@@ -87,11 +88,11 @@ func _ready() -> void:
 
 	_add_spacer(vbox, 80)
 
-	# Press any key
+	# Press any key / Tap to continue
 	press_label = Label.new()
-	press_label.text = "Press any key"
+	press_label.text = "Tap to continue" if GameSettings.is_mobile else "Press any key"
 	press_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	press_label.add_theme_font_size_override("font_size", 16)
+	press_label.add_theme_font_size_override("font_size", 28 if GameSettings.is_mobile else 16)
 	press_label.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
 	press_label.modulate.a = 0.0
 	vbox.add_child(press_label)
@@ -145,10 +146,10 @@ func _play_intro() -> void:
 	seq.tween_callback(_transition_to_menu)
 
 func _start_press_pulse() -> void:
-	var pulse = create_tween()
-	pulse.set_loops()
-	pulse.tween_property(press_label, "modulate:a", 0.25, 0.7).set_trans(Tween.TRANS_SINE)
-	pulse.tween_property(press_label, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
+	_pulse_tween = create_tween()
+	_pulse_tween.set_loops()
+	_pulse_tween.tween_property(press_label, "modulate:a", 0.25, 0.7).set_trans(Tween.TRANS_SINE)
+	_pulse_tween.tween_property(press_label, "modulate:a", 1.0, 0.7).set_trans(Tween.TRANS_SINE)
 
 # =====================
 # DECORATIVE MINI GRID
@@ -201,11 +202,13 @@ func _create_mini_grid() -> void:
 # INPUT — skip on any key
 # =====================
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if _transitioning:
 		return
 	if (event is InputEventKey and event.pressed and not event.echo) or \
-	   (event is InputEventMouseButton and event.pressed):
+	   (event is InputEventMouseButton and event.pressed) or \
+	   (event is InputEventScreenTouch and event.pressed):
+		get_viewport().set_input_as_handled()
 		_transition_to_menu()
 
 # =====================
@@ -216,6 +219,8 @@ func _transition_to_menu() -> void:
 	if _transitioning:
 		return
 	_transitioning = true
+	if _pulse_tween:
+		_pulse_tween.kill()
 	SoundManager.play("click")
 
 	fade_rect.z_index = 200

@@ -1,0 +1,21 @@
+[gd_scene load_steps=6 format=3 uid="uid://bqtut0r14lchx"]
+
+[ext_resource type="Script" path="res://scripts/tutorial_scene.gd" id="1_tscene"]
+[ext_resource type="PackedScene" uid="uid://p7j5mhd8x8ju" path="res://scenes/game_board.tscn" id="2_tscene"]
+[ext_resource type="PackedScene" uid="uid://byb83hoq0ndhs" path="res://scenes/player.tscn" id="3_tscene"]
+[ext_resource type="PackedScene" path="res://scenes/d_pad.tscn" id="4_tscene"]
+[ext_resource type="Script" path="res://scripts/camera_shake.gd" id="5_tscene"]
+
+[node name="Tutorial" type="Node2D"]
+script = ExtResource("1_tscene")
+
+[node name="GameBoard" parent="." instance=ExtResource("2_tscene")]
+knight_warning_time = 1.0
+
+[node name="Player" parent="." instance=ExtResource("3_tscene")]
+position = Vector2(400, 400)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+script = ExtResource("5_tscene")
+
+[node name="DPad" parent="." instance=ExtResource("4_tscene")]

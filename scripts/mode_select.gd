@@ -21,6 +21,15 @@ var _hud: CanvasLayer
 
 func _ready() -> void:
 	_build_ui()
+	get_viewport().size_changed.connect(_on_viewport_resized)
+
+func _on_viewport_resized() -> void:
+	for child in get_children():
+		child.queue_free()
+	await get_tree().process_frame
+	if not is_inside_tree():
+		return
+	_build_ui()
 
 # =====================
 # BUILD UI
@@ -58,19 +67,45 @@ func _build_ui() -> void:
 	subtitle.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
 	_hud.add_child(subtitle)
 
-	# Card row (centered)
-	var card_wrap = CenterContainer.new()
-	card_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
-	card_wrap.add_theme_constant_override("margin_top", 0)
-	_hud.add_child(card_wrap)
+	# Card layout — portrait: vertical stack; landscape: horizontal row
+	var vp := get_viewport().get_visible_rect().size
+	var is_portrait := GameSettings.is_mobile and (vp.y > vp.x)
 
-	var card_row = HBoxContainer.new()
-	card_row.add_theme_constant_override("separation", 32)
-	card_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	card_wrap.add_child(card_row)
+	if is_portrait:
+		# Full-rect margin container so cards fill the width with side padding
+		var card_margin = MarginContainer.new()
+		card_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+		card_margin.add_theme_constant_override("margin_left",   24)
+		card_margin.add_theme_constant_override("margin_right",  24)
+		card_margin.add_theme_constant_override("margin_top",    130)  # below title area
+		card_margin.add_theme_constant_override("margin_bottom", 20)
+		_hud.add_child(card_margin)
 
-	for mode in MODES:
-		card_row.add_child(_build_card(mode))
+		var card_col = VBoxContainer.new()
+		card_col.add_theme_constant_override("separation", 20)
+		card_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		card_margin.add_child(card_col)
+
+		for mode in MODES:
+			var card := _build_card(mode)
+			card.custom_minimum_size = Vector2(0, 0)
+			card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			card.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+			card_col.add_child(card)
+	else:
+		# Landscape: original centred horizontal row
+		var card_wrap = CenterContainer.new()
+		card_wrap.set_anchors_preset(Control.PRESET_FULL_RECT)
+		card_wrap.add_theme_constant_override("margin_top", 0)
+		_hud.add_child(card_wrap)
+
+		var card_row = HBoxContainer.new()
+		card_row.add_theme_constant_override("separation", 32)
+		card_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		card_wrap.add_child(card_row)
+
+		for mode in MODES:
+			card_row.add_child(_build_card(mode))
 
 	# Back button
 	var back_layer = CanvasLayer.new()
@@ -82,27 +117,33 @@ func _build_ui() -> void:
 	back_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	back_layer.add_child(back_root)
 
+	var safe_top_ms := 0
+	if GameSettings.is_mobile:
+		var r_ms := DisplayServer.get_display_safe_area()
+		safe_top_ms = maxi(r_ms.position.y, 72)
+
 	var back_btn = Button.new()
 	back_btn.text = "< BACK"
 	back_btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	back_btn.position = Vector2(20, 20)
-	back_btn.custom_minimum_size = Vector2(120, 50)
-	back_btn.add_theme_font_size_override("font_size", 20)
+	back_btn.position = Vector2(20, 20 + safe_top_ms)
+	back_btn.custom_minimum_size = Vector2(120, 50) if not GameSettings.is_mobile else Vector2(160, 80)
+	back_btn.add_theme_font_size_override("font_size", 20 if not GameSettings.is_mobile else 28)
 	back_btn.add_theme_color_override("font_color", Color.WHITE)
 	_style_back_button(back_btn)
 	back_btn.pressed.connect(_on_back_pressed)
 	back_root.add_child(back_btn)
 
-	# ESC hint
-	var hint = Label.new()
-	hint.text = "ESC to go back"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	hint.position = Vector2(-80, -28)
-	hint.custom_minimum_size = Vector2(160, 0)
-	hint.add_theme_font_size_override("font_size", 14)
-	hint.add_theme_color_override("font_color", Color(0.35, 0.35, 0.45))
-	_hud.add_child(hint)
+	# ESC hint (PC only)
+	if not GameSettings.is_mobile:
+		var hint = Label.new()
+		hint.text = "ESC to go back"
+		hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		hint.position = Vector2(-80, -28)
+		hint.custom_minimum_size = Vector2(160, 0)
+		hint.add_theme_font_size_override("font_size", 14)
+		hint.add_theme_color_override("font_color", Color(0.35, 0.35, 0.45))
+		_hud.add_child(hint)
 
 func _build_card(mode: Dictionary) -> PanelContainer:
 	var card = PanelContainer.new()
@@ -178,6 +219,7 @@ func _build_card(mode: Dictionary) -> PanelContainer:
 	var play_btn = Button.new()
 	play_btn.text = "PLAY"
 	play_btn.custom_minimum_size = Vector2(160, 52)
+	play_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	play_btn.add_theme_font_size_override("font_size", 22)
 	play_btn.add_theme_color_override("font_color", Color(0.05, 0.05, 0.08))
 	_style_play_button(play_btn, accent)

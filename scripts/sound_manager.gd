@@ -140,8 +140,9 @@ func play(sound_name: String, volume_db_offset: float = 0.0) -> void:
 	asp.volume_db = min(linear_to_db(sfx_volume) + gain, MAX_VOLUME_DB)
 	asp.play()
 
-func play_pitched(sound_name: String, pitch_min: float = 0.9, pitch_max: float = 1.1) -> void:
-	"""Play with random pitch variation — great for repeated sounds like footsteps."""
+func play_pitched(sound_name: String, pitch_min: float = 0.9, pitch_max: float = 1.1, volume_db_offset: float = 0.0) -> void:
+	"""Play with random pitch variation — great for repeated sounds like footsteps.
+	   Pass a negative volume_db_offset to make this instance quieter."""
 	if sfx_volume <= 0.0 or master_volume <= 0.0:
 		return
 
@@ -158,7 +159,7 @@ func play_pitched(sound_name: String, pitch_min: float = 0.9, pitch_max: float =
 
 	asp.stream = stream
 	asp.pitch_scale = randf_range(pitch_min, pitch_max)
-	var gain = SOUND_GAIN.get(sound_name, 0.0)
+	var gain = SOUND_GAIN.get(sound_name, 0.0) + volume_db_offset
 	asp.volume_db = min(linear_to_db(sfx_volume) + gain, MAX_VOLUME_DB)
 	asp.play()
 

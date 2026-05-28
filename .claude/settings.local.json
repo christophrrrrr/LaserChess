@@ -3,7 +3,9 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\laser-chess\" -Recurse -Force)",
       "Bash(Select-Object FullName)",
-      "Bash(Sort-Object FullName)"
+      "Bash(Sort-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\laser-chess\" -Recurse -Include \"*.gd\", \"project.godot\")",
+      "Bash(Select-Object -First 20 FullName)"
     ]
   }
 }

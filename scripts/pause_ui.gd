@@ -19,6 +19,45 @@ var pause_button: Button
 func _ready() -> void:
 	layer = 100  # Above everything
 	_build_ui()
+	get_viewport().size_changed.connect(_layout)
+
+func _get_safe_top() -> float:
+	if not GameSettings.is_mobile:
+		return 0.0
+	var r := DisplayServer.get_display_safe_area()
+	return maxf(float(r.position.y), 72.0)
+
+func _layout() -> void:
+	if not is_instance_valid(pause_button):
+		return
+	var vp  := get_viewport().get_visible_rect().size
+	var btn := pause_button.custom_minimum_size.x
+
+	if not GameSettings.is_mobile:
+		# PC: fixed top-right anchor
+		pause_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		pause_button.position = Vector2(-btn - 10.0, 20.0)
+		return
+
+	var safe_top := _get_safe_top()
+
+	if vp.y >= vp.x:
+		# Portrait — centre button horizontally in the top black band
+		# Board is square (size = vp.x) centred vertically; top band ends at (vp.y - vp.x)/2
+		var band_h   := (vp.y - vp.x) / 2.0
+		var usable_y: float = maxf(safe_top, 0.0)
+		var btn_y: float    = usable_y + (band_h - usable_y - btn) / 2.0
+		btn_y = maxf(btn_y, safe_top + 8.0)
+		pause_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		pause_button.position = Vector2(vp.x - btn - 40.0, btn_y)
+	else:
+		# Landscape — top of the right black band
+		var band_w  := (vp.x - vp.y) / 2.0   # board = vp.y wide, centred horizontally
+		var right_x := (vp.x + vp.y) / 2.0   # start of right band
+		var btn_x   := right_x + (band_w - btn) / 2.0
+		var btn_y   := safe_top + 20.0
+		pause_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+		pause_button.position = Vector2(btn_x, btn_y)
 
 func _build_ui() -> void:
 	# Main container for everything
@@ -26,19 +65,21 @@ func _build_ui() -> void:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
-	
-	# Pause button in top-right
+
+	# Pause button — size 100 on mobile, 60 on PC; positioned via _layout()
+	var _btn_size := 100.0 if GameSettings.is_mobile else 60.0
 	pause_button = Button.new()
-	pause_button.text = "II"  # Pause icon (ASCII compatible)
-	pause_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	pause_button.position = Vector2(-80, 20)
-	pause_button.custom_minimum_size = Vector2(60, 60)
-	pause_button.add_theme_font_size_override("font_size", 24)
+	pause_button.text = "II"
+	pause_button.custom_minimum_size = Vector2(_btn_size, _btn_size)
+	pause_button.add_theme_font_size_override("font_size", 32 if GameSettings.is_mobile else 24)
 	pause_button.add_theme_color_override("font_color", Color.WHITE)
 	_style_pause_button(pause_button)
 	pause_button.pressed.connect(_on_pause_pressed)
 	root.add_child(pause_button)
-	
+
+	# Position the button now (viewport is valid at build time)
+	_layout()
+
 	# Pause panel (hidden by default)
 	pause_panel = _create_pause_panel()
 	pause_panel.visible = false
@@ -129,9 +170,9 @@ func _create_pause_panel() -> Control:
 func _create_menu_button(text: String, color: Color) -> Button:
 	var btn = Button.new()
 	btn.text = text
-	btn.custom_minimum_size = Vector2(560, 120)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_size_override("font_size", 40)
+	btn.custom_minimum_size = Vector2(320, 90)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", 32)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 	
 	var normal = StyleBoxFlat.new()

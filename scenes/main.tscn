@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://d4l4xdm13fk66"]
+[gd_scene load_steps=10 format=3 uid="uid://d4l4xdm13fk66"]
 
 [ext_resource type="PackedScene" uid="uid://p7j5mhd8x8ju" path="res://scenes/game_board.tscn" id="1_o5qli"]
 [ext_resource type="PackedScene" uid="uid://byb83hoq0ndhs" path="res://scenes/player.tscn" id="2_0wfyh"]
@@ -6,8 +6,12 @@
 [ext_resource type="PackedScene" uid="uid://xklv3sj16ova" path="res://scenes/hazard_spawner.tscn" id="4_jyhfs"]
 [ext_resource type="PackedScene" uid="uid://c8gkffxrmbwts" path="res://scenes/GameOverUI.tscn" id="5_tbgi4"]
 [ext_resource type="PackedScene" uid="uid://cr87ws483l3ae" path="res://scenes/pause_ui.tscn" id="6_tefeu"]
+[ext_resource type="PackedScene" path="res://scenes/d_pad.tscn" id="7_dpad"]
+[ext_resource type="Script" path="res://scripts/main.gd" id="8_main"]
+[ext_resource type="Script" path="res://scripts/camera_shake.gd" id="9_camshake"]
 
 [node name="Main" type="Node2D"]
+script = ExtResource("8_main")
 
 [node name="GameBoard" parent="." instance=ExtResource("1_o5qli")]
 knight_warning_time = 1.0
@@ -16,14 +20,17 @@ knight_warning_time = 1.0
 position = Vector2(400, 400)
 
 [node name="Camera2D" type="Camera2D" parent="."]
+script = ExtResource("9_camshake")
 
 [node name="ScoreUI" parent="." instance=ExtResource("3_sugp2")]
 
 [node name="HazardSpawner" parent="." instance=ExtResource("4_jyhfs")]
-min_interval = 0.5
-difficulty_scale = 0.7
+min_interval = 0.65
+difficulty_curve = 0.009
 max_hazards_per_spawn = 5
 
 [node name="GameOverUI" parent="." instance=ExtResource("5_tbgi4")]
 
 [node name="PauseUI" parent="." instance=ExtResource("6_tefeu")]
+
+[node name="DPad" parent="." instance=ExtResource("7_dpad")]

@@ -8,6 +8,8 @@ var highscore_label: Label
 var points_label: Label
 var restart_label: Label
 var menu_label: Label
+var _mobile_restart_btn: Button
+var _mobile_menu_btn: Button
 var final_score: int = 0
 var is_restarting: bool = false
 
@@ -51,9 +53,18 @@ func _process(delta: float) -> void:
 		_grace_timer -= delta
 		if _grace_timer <= 0.0:
 			_accepting_input = true
-			# Fade the restart hint in once input is actually accepted
-			var t = create_tween()
-			t.tween_property(restart_label, "modulate:a", 1.0, 0.25)
+			if GameSettings.is_mobile:
+				# Enable the real buttons
+				if _mobile_restart_btn:
+					_mobile_restart_btn.disabled = false
+					_mobile_restart_btn.modulate.a = 1.0
+				if _mobile_menu_btn:
+					_mobile_menu_btn.disabled = false
+					_mobile_menu_btn.modulate.a = 1.0
+			else:
+				# Fade the restart hint in once input is actually accepted
+				var t = create_tween()
+				t.tween_property(restart_label, "modulate:a", 1.0, 0.25)
 
 # =====================
 # GAME OVER UI
@@ -104,7 +115,7 @@ func _setup_ui() -> void:
 	highscore_label = Label.new()
 	highscore_label.text = ""
 	highscore_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	highscore_label.add_theme_font_size_override("font_size", 22)
+	highscore_label.add_theme_font_size_override("font_size", 28 if GameSettings.is_mobile else 22)
 	highscore_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
 	vbox.add_child(highscore_label)
 
@@ -113,27 +124,54 @@ func _setup_ui() -> void:
 	points_label = Label.new()
 	points_label.text = ""
 	points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	points_label.add_theme_font_size_override("font_size", 18)
+	points_label.add_theme_font_size_override("font_size", 24 if GameSettings.is_mobile else 18)
 	points_label.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0))
 	vbox.add_child(points_label)
 
 	_add_spacer(vbox, 30)
 
-	restart_label = Label.new()
-	restart_label.text = "Press SPACE to restart"
-	restart_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	restart_label.add_theme_font_size_override("font_size", 24)
-	restart_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	vbox.add_child(restart_label)
+	if GameSettings.is_mobile:
+		# Real tappable buttons — much easier to hit than text hints
+		_mobile_restart_btn = _create_action_button("RESTART", Color(0.18, 0.52, 0.28), 90, 32)
+		_mobile_restart_btn.pressed.connect(func():
+			if _accepting_input and not is_restarting:
+				SoundManager.play("click")
+				_restart_game()
+		)
+		vbox.add_child(_mobile_restart_btn)
 
-	_add_spacer(vbox, 10)
+		_add_spacer(vbox, 14)
 
-	menu_label = Label.new()
-	menu_label.text = "ESC for menu"
-	menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	menu_label.add_theme_font_size_override("font_size", 18)
-	menu_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
-	vbox.add_child(menu_label)
+		_mobile_menu_btn = _create_action_button("MENU", Color(0.25, 0.27, 0.35), 80, 28)
+		_mobile_menu_btn.pressed.connect(func():
+			SoundManager.play("click")
+			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+		)
+		vbox.add_child(_mobile_menu_btn)
+
+		# Still create restart_label as invisible dummy (referenced by show_game_over)
+		restart_label = Label.new()
+		restart_label.visible = false
+		vbox.add_child(restart_label)
+		menu_label = Label.new()
+		menu_label.visible = false
+		vbox.add_child(menu_label)
+	else:
+		restart_label = Label.new()
+		restart_label.text = "Press SPACE to restart"
+		restart_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		restart_label.add_theme_font_size_override("font_size", 24)
+		restart_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+		vbox.add_child(restart_label)
+
+		_add_spacer(vbox, 10)
+
+		menu_label = Label.new()
+		menu_label.text = "ESC for menu"
+		menu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		menu_label.add_theme_font_size_override("font_size", 18)
+		menu_label.add_theme_color_override("font_color", Color(0.5, 0.5, 0.6))
+		vbox.add_child(menu_label)
 
 # =====================
 # PAUSE MENU
@@ -150,14 +188,25 @@ func _setup_pause_menu() -> void:
 	overlay.color = Color(0, 0, 0, 0.65)
 	pause_container.add_child(overlay)
 
-	# Center wrapper
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	pause_container.add_child(center)
-
-	# Panel
+	# Center wrapper (margin on mobile so panel doesn't touch screen edges)
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(640, 560)
+	if GameSettings.is_mobile:
+		var pause_margin = MarginContainer.new()
+		pause_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+		pause_margin.add_theme_constant_override("margin_left",   28)
+		pause_margin.add_theme_constant_override("margin_right",  28)
+		pause_margin.add_theme_constant_override("margin_top",    40)
+		pause_margin.add_theme_constant_override("margin_bottom", 40)
+		pause_container.add_child(pause_margin)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pause_margin.add_child(panel)
+	else:
+		var center = CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		pause_container.add_child(center)
+		panel.custom_minimum_size = Vector2(640, 560)
+		center.add_child(panel)
+
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.06, 0.06, 0.12)
 	panel_style.set_corner_radius_all(14)
@@ -165,7 +214,6 @@ func _setup_pause_menu() -> void:
 	panel_style.set_border_width_all(2)
 	panel_style.set_content_margin_all(30)
 	panel.add_theme_stylebox_override("panel", panel_style)
-	center.add_child(panel)
 
 	var vbox = VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -201,7 +249,7 @@ func _setup_pause_menu() -> void:
 
 	# Hint
 	var hint = Label.new()
-	hint.text = "ESC or SPACE to continue"
+	hint.text = "Tap CONTINUE to resume" if GameSettings.is_mobile else "ESC or SPACE to continue"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_font_size_override("font_size", 28)
 	hint.add_theme_color_override("font_color", Color(0.4, 0.4, 0.5))
@@ -257,31 +305,41 @@ func _pause_to_menu() -> void:
 # =====================
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventKey and event.pressed and not event.echo):
+	var is_key:   bool = event is InputEventKey            and event.pressed and not event.echo
+	var is_tap:   bool = event is InputEventScreenTouch    and event.pressed
+	var is_click: bool = event is InputEventMouseButton    and event.pressed
+
+	if not (is_key or is_tap or is_click):
 		return
 
-	# --- ESC key ---
-	if event.keycode == KEY_ESCAPE:
+	# --- ESC key (keyboard only) ---
+	if is_key and (event as InputEventKey).keycode == KEY_ESCAPE:
 		if is_paused:
 			_resume_game()
 		elif container.visible:
-			# Game over → main menu (ESC always works, no grace needed)
 			SoundManager.play("click")
 			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 		elif not player.is_dead and not is_restarting:
-			# Playing → pause
 			_pause_game()
 		return
 
-	# --- SPACE / ENTER while paused → resume ---
+	# --- SPACE / ENTER while paused → resume (keyboard only) ---
 	if is_paused:
-		if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-			_resume_game()
+		if is_key:
+			var kc := (event as InputEventKey).keycode
+			if kc == KEY_SPACE or kc == KEY_ENTER:
+				_resume_game()
 		return
 
 	# --- Game over inputs (ONLY after grace period) ---
 	if container.visible and _accepting_input and not is_restarting:
-		if event.keycode == KEY_SPACE or event.keycode == KEY_E or event.keycode == KEY_ENTER:
+		var want_restart := false
+		if is_key:
+			var kc := (event as InputEventKey).keycode
+			want_restart = kc == KEY_SPACE or kc == KEY_E or kc == KEY_ENTER
+		elif (is_tap or is_click) and GameSettings.is_mobile:
+			want_restart = true
+		if want_restart:
 			SoundManager.play("click")
 			_restart_game()
 
@@ -311,10 +369,19 @@ func show_game_over() -> void:
 	else:
 		points_label.visible = false
 
-	# Start grace period — restart label is hidden until it's safe to accept input
+	# Start grace period — input blocked for a moment after death
 	_accepting_input = false
 	_grace_timer = RESTART_GRACE_PERIOD
-	restart_label.modulate.a = 0.0  # hidden during grace
+	if GameSettings.is_mobile:
+		# Disable buttons during grace period so they can't be fat-fingered immediately
+		if _mobile_restart_btn:
+			_mobile_restart_btn.disabled = true
+			_mobile_restart_btn.modulate.a = 0.5
+		if _mobile_menu_btn:
+			_mobile_menu_btn.disabled = true
+			_mobile_menu_btn.modulate.a = 0.5
+	else:
+		restart_label.modulate.a = 0.0  # hidden during grace
 
 	container.visible = true
 	container.modulate.a = 0
@@ -356,3 +423,36 @@ func _add_spacer(parent: Control, height: float) -> void:
 	var spacer = Control.new()
 	spacer.custom_minimum_size = Vector2(0, height)
 	parent.add_child(spacer)
+
+func _create_action_button(text: String, color: Color, height: int, font_size: int) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	# 560px min width looks good on 1080px-wide portrait phone (centered by CenterContainer)
+	btn.custom_minimum_size = Vector2(560, height)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_font_size_override("font_size", font_size)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = color
+	normal.set_corner_radius_all(10)
+	normal.border_color = color.lightened(0.2)
+	normal.set_border_width_all(2)
+	normal.shadow_color = Color(0, 0, 0, 0.4)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	btn.add_theme_stylebox_override("normal", normal)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = color.lightened(0.1)
+	hover.set_corner_radius_all(10)
+	hover.set_border_width_all(2)
+	hover.border_color = color.lightened(0.3)
+	btn.add_theme_stylebox_override("hover", hover)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = color.darkened(0.15)
+	pressed.set_corner_radius_all(10)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return btn

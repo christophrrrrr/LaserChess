@@ -92,10 +92,11 @@ func _setup_visuals() -> void:
 	sprite.modulate = Color(1.0, 1.0, 1.0, 1.0)
 	add_child(sprite)
 
-	var tween = create_tween()
-	tween.set_loops()
-	tween.tween_property(glow, "modulate:a", 0.7, 0.4).set_trans(Tween.TRANS_SINE)
-	tween.tween_property(glow, "modulate:a", 0.3, 0.4).set_trans(Tween.TRANS_SINE)
+	if is_inside_tree():
+		var tween = create_tween()
+		tween.set_loops()
+		tween.tween_property(glow, "modulate:a", 0.7, 0.4).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(glow, "modulate:a", 0.3, 0.4).set_trans(Tween.TRANS_SINE)
 
 # =====================
 # HAT SYSTEM
@@ -186,8 +187,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		_keys_this_frame.append(event.keycode)
 	
-	# === TOUCH INPUT HANDLING ===
-	if event is InputEventScreenTouch:
+	# === TOUCH INPUT HANDLING (swipe mode only — d_pad uses TouchScreenButton nodes) ===
+	if event is InputEventScreenTouch and GameSettings.control_scheme == "swipe":
 		if event.pressed:
 			# Finger down - start tracking
 			if not _is_touching:

@@ -1,0 +1,50 @@
+[gd_scene load_steps=2 format=3 uid="uid://d_pad_scene"]
+
+[ext_resource type="Script" path="res://scripts/d_pad.gd" id="1_dpad"]
+
+[node name="DPad" type="CanvasLayer"]
+layer = 50
+script = ExtResource("1_dpad")
+
+[node name="Root" type="Control" parent="."]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="UpBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(110, -250)
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+action = "move_up"
+passby_press = true
+
+[node name="DownBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(110, -80)
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+action = "move_down"
+passby_press = true
+
+[node name="LeftBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(20, -165)
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+action = "move_left"
+passby_press = true
+
+[node name="RightBtn" type="TouchScreenButton" parent="Root"]
+position = Vector2(200, -165)
+anchor_left = 0.0
+anchor_top = 1.0
+anchor_right = 0.0
+anchor_bottom = 1.0
+action = "move_right"
+passby_press = true

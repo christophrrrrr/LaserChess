@@ -18,6 +18,8 @@ var sfx_slider: HSlider
 var sfx_value_label: Label
 var master_slider: HSlider
 var master_value_label: Label
+var _scheme_dpad_btn: Button
+var _scheme_swipe_btn: Button
 
 # Profile
 var profile_name_label: Label
@@ -37,14 +39,24 @@ var _lb_solo_btn: Button
 # Shop
 var shop_content: VBoxContainer
 var shop_points_label: Label
+var _shop_scroll: ScrollContainer = null
+var _shop_outer_col: VBoxContainer = null
 
 # Background
 var bg_pieces: Array = []
 var piece_textures: Array = []
 
 func _ready() -> void:
+	if not GameSettings.tutorial_complete:
+		get_tree().change_scene_to_file("res://scenes/tutorial.tscn")
+		return
+
 	_load_piece_textures()
-	_build_layout()
+	if GameSettings.is_mobile:
+		_build_layout_portrait()
+	else:
+		_build_layout()
+	_add_tutorial_shortcut()
 	_setup_settings_panel()
 	_setup_shop_panel()
 	settings_panel.visible = false
@@ -64,6 +76,11 @@ func _load_piece_textures() -> void:
 	for p in paths:
 		if ResourceLoader.exists(p):
 			piece_textures.append(load(p))
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventScreenDrag and _shop_scroll != null and shop_panel != null and shop_panel.visible:
+		_shop_scroll.scroll_vertical -= int(event.relative.y)
+		get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
 	for piece in bg_pieces:
@@ -113,6 +130,257 @@ func _build_layout() -> void:
 	# RIGHT PANEL
 	var right_panel = _build_right_panel()
 	main_container.add_child(right_panel)
+
+# =====================
+# PORTRAIT LAYOUT - Single column, full-screen
+# =====================
+
+func _build_layout_portrait() -> void:
+	# Background
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.032, 0.035, 0.065)
+	add_child(bg)
+
+	_setup_floating_bg(self)
+
+	# Root margin container with side padding
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.add_theme_constant_override("margin_left",   32)
+	margin.add_theme_constant_override("margin_right",  32)
+	margin.add_theme_constant_override("margin_top",    24)
+	margin.add_theme_constant_override("margin_bottom", 32)
+	add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 0)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	margin.add_child(vbox)
+
+	# ── Header: player name + ELO — tappable to open profile ──
+	var header_btn := Button.new()
+	header_btn.flat = true
+	header_btn.text = ""
+	header_btn.custom_minimum_size = Vector2(0, 56)
+	header_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var hov_style := StyleBoxFlat.new()
+	hov_style.bg_color = Color(1, 1, 1, 0.06)
+	hov_style.set_corner_radius_all(8)
+	header_btn.add_theme_stylebox_override("hover",   hov_style)
+	header_btn.add_theme_stylebox_override("normal",  StyleBoxEmpty.new())
+	header_btn.add_theme_stylebox_override("pressed", StyleBoxEmpty.new())
+	header_btn.add_theme_stylebox_override("focus",   StyleBoxEmpty.new())
+	header_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_show_own_profile_popup()
+	)
+	vbox.add_child(header_btn)
+
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 12)
+	header.set_anchors_preset(Control.PRESET_FULL_RECT)
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header_btn.add_child(header)
+
+	profile_name_label = Label.new()
+	profile_name_label.text = PlayerData.player_name
+	profile_name_label.add_theme_font_size_override("font_size", 28)
+	profile_name_label.add_theme_color_override("font_color", Color(0.85, 0.88, 1.0))
+	profile_name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	profile_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	profile_name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(profile_name_label)
+
+	var elo_prefix := Label.new()
+	elo_prefix.text = "ELO:"
+	elo_prefix.add_theme_font_size_override("font_size", 28)
+	elo_prefix.add_theme_color_override("font_color", Color(0.68, 0.7, 0.78))
+	elo_prefix.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	elo_prefix.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(elo_prefix)
+
+	elo_label = Label.new()
+	elo_label.text = str(PlayerData.elo_bullet)
+	elo_label.add_theme_font_size_override("font_size", 28)
+	elo_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.22))
+	elo_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	elo_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(elo_label)
+
+	# Small "›" hint to signal tappability
+	var hint_arrow := Label.new()
+	hint_arrow.text = "›"
+	hint_arrow.add_theme_font_size_override("font_size", 28)
+	hint_arrow.add_theme_color_override("font_color", Color(0.4, 0.42, 0.55))
+	hint_arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hint_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.add_child(hint_arrow)
+
+	# Thin divider under header
+	var header_div := ColorRect.new()
+	header_div.custom_minimum_size = Vector2(0, 2)
+	header_div.color = Color(0.15, 0.17, 0.28, 0.6)
+	vbox.add_child(header_div)
+
+	_add_spacer(vbox, 36)
+
+	# ── Title ──
+	var title := Label.new()
+	title.text = "LASER CHESS"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 64)
+	title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
+	title.add_theme_color_override("font_shadow_color", Color(0.5, 0.35, 0.0, 0.5))
+	title.add_theme_constant_override("shadow_offset_x", 3)
+	title.add_theme_constant_override("shadow_offset_y", 3)
+	vbox.add_child(title)
+
+	_add_spacer(vbox, 6)
+
+	var subtitle := Label.new()
+	subtitle.text = "Survive the Board"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 22)
+	subtitle.add_theme_color_override("font_color", Color(0.48, 0.5, 0.58))
+	vbox.add_child(subtitle)
+
+	_add_spacer(vbox, 40)
+
+	# ── Main buttons (full-width) ──
+	var play_btn := _create_portrait_button("PLAY", Color(0.15, 0.65, 0.35), Color(0.1, 0.5, 0.25))
+	play_btn.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/main.tscn")
+	)
+	vbox.add_child(play_btn)
+
+	_add_spacer(vbox, 14)
+
+	var ranked_btn := _create_portrait_button("RANKED", Color(0.85, 0.5, 0.1), Color(0.68, 0.38, 0.05))
+	ranked_btn.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
+	)
+	vbox.add_child(ranked_btn)
+
+	_add_spacer(vbox, 14)
+
+	var settings_btn := _create_portrait_button("SETTINGS", Color(0.28, 0.42, 0.65), Color(0.2, 0.32, 0.52))
+	settings_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_update_settings_values()
+		settings_panel.visible = true
+	)
+	vbox.add_child(settings_btn)
+
+	_add_spacer(vbox, 40)
+
+	# ── Bottom row: VIEW ALL + SHOP ──
+	var bottom_row := HBoxContainer.new()
+	bottom_row.add_theme_constant_override("separation", 16)
+	vbox.add_child(bottom_row)
+
+	var view_btn := _create_portrait_button("VIEW ALL", Color(0.8, 0.65, 0.12), Color(0.65, 0.5, 0.08))
+	view_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	view_btn.custom_minimum_size = Vector2(0, 72)
+	view_btn.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/leaderboard.tscn")
+	)
+	bottom_row.add_child(view_btn)
+
+	var shop_btn := _create_portrait_button("SHOP", Color(0.25, 0.58, 0.72), Color(0.18, 0.45, 0.58))
+	shop_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_btn.custom_minimum_size = Vector2(0, 72)
+	shop_btn.pressed.connect(_on_shop_pressed)
+	bottom_row.add_child(shop_btn)
+
+	# ── Hidden dummy nodes for labels that _update_profile_sidebar() writes to ──
+	# (they must exist even though portrait layout doesn't display them)
+	var _dummy_root := Control.new()
+	_dummy_root.visible = false
+	add_child(_dummy_root)
+	high_score_label = _make_dummy_label(_dummy_root)
+	points_label     = _make_dummy_label(_dummy_root)
+	record_label     = _make_dummy_label(_dummy_root)
+	winrate_label    = _make_dummy_label(_dummy_root)
+	lb_content       = VBoxContainer.new()
+	_dummy_root.add_child(lb_content)
+
+
+func _make_dummy_label(parent: Control) -> Label:
+	var lbl := Label.new()
+	parent.add_child(lbl)
+	return lbl
+
+
+func _create_portrait_button(text: String, color: Color, dark_color: Color) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(0, 90)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.add_theme_font_size_override("font_size", 32)
+	btn.add_theme_color_override("font_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = color
+	normal.set_corner_radius_all(10)
+	normal.border_color = color.lightened(0.2)
+	normal.border_width_top = 2
+	normal.border_width_left = 1
+	normal.border_width_right = 1
+	normal.shadow_color = Color(0, 0, 0, 0.4)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	btn.add_theme_stylebox_override("normal", normal)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = color.lightened(0.1)
+	hover.set_corner_radius_all(10)
+	hover.border_color = color.lightened(0.3)
+	hover.border_width_top = 2
+	hover.border_width_left = 1
+	hover.border_width_right = 1
+	hover.shadow_color = Color(0, 0, 0, 0.5)
+	hover.shadow_size = 8
+	hover.shadow_offset = Vector2(0, 5)
+	btn.add_theme_stylebox_override("hover", hover)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = dark_color
+	pressed.set_corner_radius_all(10)
+	pressed.shadow_size = 2
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return btn
+
+
+# Floating "?" button in the bottom-right corner (both layouts)
+func _add_tutorial_shortcut() -> void:
+	var btn := Button.new()
+	btn.text = "?"
+	btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	btn.position = Vector2(-108, -108)
+	btn.custom_minimum_size = Vector2(68, 68)
+	btn.add_theme_font_size_override("font_size", 28)
+	btn.add_theme_color_override("font_color", Color(0.75, 0.78, 0.88))
+	var s := StyleBoxFlat.new()
+	s.bg_color = Color(0.10, 0.11, 0.18, 0.85)
+	s.set_corner_radius_all(34)
+	s.border_color = Color(0.28, 0.32, 0.50, 0.80)
+	s.set_border_width_all(2)
+	btn.add_theme_stylebox_override("normal", s)
+	var sh := s.duplicate() as StyleBoxFlat
+	sh.bg_color = Color(0.16, 0.18, 0.28, 0.9)
+	btn.add_theme_stylebox_override("hover", sh)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.pressed.connect(func():
+		SoundManager.play("click")
+		get_tree().change_scene_to_file("res://scenes/tutorial.tscn")
+	)
+	add_child(btn)
+
 
 # =====================
 # LEFT PANEL - Leaderboard
@@ -274,7 +542,7 @@ func _build_center_area() -> Control:
 	vbox.add_child(ranked_btn)
 	
 	_add_spacer(vbox, 20)
-	
+
 	var settings_btn = _create_main_button("SETTINGS", Color(0.28, 0.42, 0.65), Color(0.2, 0.32, 0.52))
 	settings_btn.pressed.connect(func():
 		SoundManager.play("click")
@@ -572,7 +840,6 @@ func _on_lb_loaded(players: Array) -> void:
 
 func _render_mini_leaderboard() -> void:
 	for c in lb_content.get_children():
-		lb_content.remove_child(c)
 		c.queue_free()
 
 	if _lb_players.is_empty():
@@ -651,12 +918,8 @@ func _create_lb_row(rank: int, pname: String, elo: int, is_me: bool) -> PanelCon
 
 func _setup_settings_panel() -> void:
 	var oc = _create_overlay()
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	oc.add_child(center)
 
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(660, 630)
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.055, 0.06, 0.095)
 	style.border_color = Color(0.15, 0.17, 0.25)
@@ -666,7 +929,31 @@ func _setup_settings_panel() -> void:
 	style.shadow_color = Color(0, 0, 0, 0.5)
 	style.shadow_size = 20
 	panel.add_theme_stylebox_override("panel", style)
-	center.add_child(panel)
+
+	if GameSettings.is_mobile:
+		# MarginContainer provides the safe-area padding on all sides
+		var safe_top_val: int = maxi(int(DisplayServer.get_display_safe_area().position.y), 80)
+		var margin_cont := MarginContainer.new()
+		margin_cont.set_anchors_preset(Control.PRESET_FULL_RECT)
+		margin_cont.add_theme_constant_override("margin_left",   28)
+		margin_cont.add_theme_constant_override("margin_right",  28)
+		margin_cont.add_theme_constant_override("margin_top",    safe_top_val)
+		margin_cont.add_theme_constant_override("margin_bottom", 28)
+		oc.add_child(margin_cont)
+		# ScrollContainer inside so tall content can be scrolled on small screens
+		var scroll := ScrollContainer.new()
+		scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		margin_cont.add_child(scroll)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.add_child(panel)
+	else:
+		var center = CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		oc.add_child(center)
+		panel.custom_minimum_size = Vector2(660, 810)
+		center.add_child(panel)
 
 	var vbox = VBoxContainer.new()
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -734,6 +1021,60 @@ func _setup_settings_panel() -> void:
 		master_value_label.text = str(int(val)) + "%"
 	)
 
+	_add_spacer(vbox, 24)
+	_add_modal_divider(vbox)
+	_add_spacer(vbox, 20)
+
+	# Control scheme toggle
+	var ctrl_title = Label.new()
+	ctrl_title.text = "Controls:"
+	ctrl_title.add_theme_font_size_override("font_size", 32)
+	ctrl_title.add_theme_color_override("font_color", Color(0.68, 0.7, 0.78))
+	ctrl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(ctrl_title)
+
+	_add_spacer(vbox, 10)
+
+	if GameSettings.is_mobile:
+		# Stack vertically on mobile — full-width tap targets
+		var scheme_col = VBoxContainer.new()
+		scheme_col.add_theme_constant_override("separation", 12)
+		scheme_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		vbox.add_child(scheme_col)
+		_scheme_dpad_btn  = _create_modal_button("D-PAD", Color(0.22, 0.52, 0.28), Color(0.15, 0.40, 0.20))
+		_scheme_swipe_btn = _create_modal_button("SWIPE", Color(0.32, 0.38, 0.52), Color(0.25, 0.30, 0.42))
+		scheme_col.add_child(_scheme_dpad_btn)
+		scheme_col.add_child(_scheme_swipe_btn)
+	else:
+		var scheme_row = HBoxContainer.new()
+		scheme_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		scheme_row.add_theme_constant_override("separation", 16)
+		vbox.add_child(scheme_row)
+		_scheme_dpad_btn  = _create_modal_button("D-PAD", Color(0.22, 0.52, 0.28), Color(0.15, 0.40, 0.20))
+		_scheme_swipe_btn = _create_modal_button("SWIPE", Color(0.32, 0.38, 0.52), Color(0.25, 0.30, 0.42))
+		scheme_row.add_child(_scheme_dpad_btn)
+		scheme_row.add_child(_scheme_swipe_btn)
+
+	var _refresh_scheme_buttons := func() -> void:
+		var is_dpad := GameSettings.control_scheme == "d_pad"
+		_scheme_dpad_btn.modulate  = Color.WHITE if is_dpad else Color(0.55, 0.55, 0.55)
+		_scheme_swipe_btn.modulate = Color.WHITE if not is_dpad else Color(0.55, 0.55, 0.55)
+
+	_refresh_scheme_buttons.call()
+
+	_scheme_dpad_btn.pressed.connect(func():
+		SoundManager.play("click")
+		GameSettings.control_scheme = "d_pad"
+		GameSettings.save_settings()
+		_refresh_scheme_buttons.call()
+	)
+	_scheme_swipe_btn.pressed.connect(func():
+		SoundManager.play("click")
+		GameSettings.control_scheme = "swipe"
+		GameSettings.save_settings()
+		_refresh_scheme_buttons.call()
+	)
+
 	_add_spacer(vbox, 28)
 
 	var back = _create_modal_button("DONE", Color(0.22, 0.25, 0.35), Color(0.18, 0.2, 0.28))
@@ -753,6 +1094,10 @@ func _update_settings_values() -> void:
 		master_slider.value = GameSettings.master_volume * 100.0
 		master_value_label.text = str(int(master_slider.value)) + "%"
 	_update_color_label()
+	if _scheme_dpad_btn and _scheme_swipe_btn:
+		var is_dpad := GameSettings.control_scheme == "d_pad"
+		_scheme_dpad_btn.modulate  = Color.WHITE if is_dpad else Color(0.55, 0.55, 0.55)
+		_scheme_swipe_btn.modulate = Color.WHITE if not is_dpad else Color(0.55, 0.55, 0.55)
 
 # =====================
 # SHOP PANEL
@@ -760,48 +1105,87 @@ func _update_settings_values() -> void:
 
 func _setup_shop_panel() -> void:
 	var oc = _create_overlay()
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	oc.add_child(center)
 
 	var panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(750, 840)
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.055, 0.06, 0.095)
 	style.border_color = Color(0.15, 0.17, 0.25)
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(12)
-	style.set_content_margin_all(32)
+	style.set_content_margin_all(20 if GameSettings.is_mobile else 32)
 	style.shadow_color = Color(0, 0, 0, 0.5)
 	style.shadow_size = 20
 	panel.add_theme_stylebox_override("panel", style)
-	center.add_child(panel)
+
+	if GameSettings.is_mobile:
+		# Full-width card with safe-area offset — same pattern as settings
+		var safe_top_val: int = maxi(int(DisplayServer.get_display_safe_area().position.y), 80)
+		var mc := MarginContainer.new()
+		mc.set_anchors_preset(Control.PRESET_FULL_RECT)
+		mc.add_theme_constant_override("margin_left",   20)
+		mc.add_theme_constant_override("margin_right",  20)
+		mc.add_theme_constant_override("margin_top",    safe_top_val + 16)
+		mc.add_theme_constant_override("margin_bottom", 20)
+		oc.add_child(mc)
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		panel.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		mc.add_child(panel)
+	else:
+		var center = CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		oc.add_child(center)
+		panel.custom_minimum_size = Vector2(750, 840)
+		center.add_child(panel)
 
 	var vbox = VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 0)
-	panel.add_child(vbox)
+
+	if GameSettings.is_mobile:
+		# outer_col: scroll takes all space, DONE button pinned at bottom
+		var outer_col := VBoxContainer.new()
+		outer_col.add_theme_constant_override("separation", 0)
+		outer_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		outer_col.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		panel.add_child(outer_col)
+		_shop_outer_col = outer_col
+		var outer_scroll := ScrollContainer.new()
+		outer_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		outer_scroll.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		outer_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		outer_col.add_child(outer_scroll)
+		_shop_scroll = outer_scroll
+		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		outer_scroll.add_child(vbox)
+	else:
+		vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+		panel.add_child(vbox)
 
 	_add_modal_title(vbox, "SHOP")
 	_add_spacer(vbox, 8)
 
 	shop_points_label = Label.new()
 	shop_points_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	shop_points_label.add_theme_font_size_override("font_size", 16)
+	shop_points_label.add_theme_font_size_override("font_size", 22 if GameSettings.is_mobile else 16)
 	shop_points_label.add_theme_color_override("font_color", Color(0.4, 0.82, 1.0))
 	vbox.add_child(shop_points_label)
 
-	_add_spacer(vbox, 20)
+	_add_spacer(vbox, 16)
 
-	var scroll = ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(420, 320)
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(scroll)
-
-	shop_content = VBoxContainer.new()
-	shop_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_content.add_theme_constant_override("separation", 8)
-	scroll.add_child(shop_content)
+	if GameSettings.is_mobile:
+		# Items go directly into vbox — the outer scroll handles everything
+		shop_content = VBoxContainer.new()
+		shop_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shop_content.add_theme_constant_override("separation", 14)
+		vbox.add_child(shop_content)
+	else:
+		var scroll = ScrollContainer.new()
+		scroll.custom_minimum_size = Vector2(420, 320)
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		vbox.add_child(scroll)
+		shop_content = VBoxContainer.new()
+		shop_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shop_content.add_theme_constant_override("separation", 8)
+		scroll.add_child(shop_content)
 
 	_add_spacer(vbox, 16)
 
@@ -814,20 +1198,32 @@ func _setup_shop_panel() -> void:
 	)
 	vbox.add_child(unequip)
 
-	_add_spacer(vbox, 10)
-
 	var back = _create_modal_button("DONE", Color(0.22, 0.25, 0.35), Color(0.18, 0.2, 0.28))
 	back.pressed.connect(_on_shop_back_pressed)
-	vbox.add_child(back)
+	if GameSettings.is_mobile:
+		_add_spacer(vbox, 20)  # breathing room at bottom of scroll
+		_shop_outer_col.add_child(back)  # DONE pinned outside scroll, always visible
+	else:
+		_add_spacer(vbox, 10)
+		vbox.add_child(back)
 
 	shop_panel = oc
 
 func _refresh_shop() -> void:
 	for child in shop_content.get_children():
-		shop_content.remove_child(child)
 		child.queue_free()
 
 	shop_points_label.text = str(PlayerData.total_points) + " points available"
+
+	# Mobile-aware sizing constants
+	var icon_sz  := 72  if GameSettings.is_mobile else 52
+	var name_fs  := 22  if GameSettings.is_mobile else 15
+	var desc_fs  := 16  if GameSettings.is_mobile else 11
+	var btn_w    := 0   if GameSettings.is_mobile else 95   # 0 = SIZE_EXPAND_FILL on mobile
+	var btn_h    := 56  if GameSettings.is_mobile else 34
+	var btn_fs   := 20  if GameSettings.is_mobile else 12
+	var pad      := 14  if GameSettings.is_mobile else 10
+	var hbox_sep := 18  if GameSettings.is_mobile else 14
 
 	var hat_ids := PlayerData.SHOP_HATS.keys()
 	hat_ids.sort_custom(func(a, b):
@@ -847,66 +1243,126 @@ func _refresh_shop() -> void:
 		s.bg_color = bg
 		s.set_corner_radius_all(8)
 		s.border_color = bdr
-		s.set_border_width_all(1)
-		s.set_content_margin_all(10)
+		s.set_border_width_all(2 if equipped else 1)
+		s.set_content_margin_all(pad)
 		item.add_theme_stylebox_override("panel", s)
 
-		var hbox = HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 14)
-		item.add_child(hbox)
+		if GameSettings.is_mobile:
+			# Mobile layout: icon + info row on top, full-width button below
+			var outer_vbox := VBoxContainer.new()
+			outer_vbox.add_theme_constant_override("separation", 10)
+			item.add_child(outer_vbox)
 
-		var icon = TextureRect.new()
-		icon.custom_minimum_size = Vector2(52, 52)
-		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		var tex_path = hat.get("tex", "")
-		# Don't use ResourceLoader.exists() - it's unreliable in exports
-		# Just try to load and handle null gracefully
-		if tex_path != "":
-			var tex = load(tex_path)
-			if tex:
-				icon.texture = tex
-		hbox.add_child(icon)
+			var top_row := HBoxContainer.new()
+			top_row.add_theme_constant_override("separation", hbox_sep)
+			outer_vbox.add_child(top_row)
 
-		var info = VBoxContainer.new()
-		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		info.add_theme_constant_override("separation", 3)
-		hbox.add_child(info)
+			var icon := TextureRect.new()
+			icon.custom_minimum_size = Vector2(icon_sz, icon_sz)
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			var tex_path := hat.get("tex", "") as String
+			if tex_path != "":
+				var tex = load(tex_path)
+				if tex:
+					icon.texture = tex
+			top_row.add_child(icon)
 
-		var n = Label.new()
-		n.text = hat["name"]
-		n.add_theme_font_size_override("font_size", 15)
-		n.add_theme_color_override("font_color", Color.WHITE if owned else Color(0.82, 0.82, 0.88))
-		info.add_child(n)
+			var info := VBoxContainer.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.add_theme_constant_override("separation", 4)
+			info.alignment = BoxContainer.ALIGNMENT_CENTER
+			top_row.add_child(info)
 
-		var d = Label.new()
-		d.text = hat["desc"]
-		d.add_theme_font_size_override("font_size", 11)
-		d.add_theme_color_override("font_color", Color(0.48, 0.5, 0.58))
-		info.add_child(d)
+			var n := Label.new()
+			n.text = hat["name"]
+			n.add_theme_font_size_override("font_size", name_fs)
+			n.add_theme_color_override("font_color", Color.WHITE if owned else Color(0.82, 0.82, 0.88))
+			info.add_child(n)
 
-		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(95, 34)
-		btn.add_theme_font_size_override("font_size", 12)
-		btn.add_theme_color_override("font_color", Color.WHITE)
+			var d := Label.new()
+			d.text = hat["desc"]
+			d.add_theme_font_size_override("font_size", desc_fs)
+			d.add_theme_color_override("font_color", Color(0.48, 0.5, 0.58))
+			info.add_child(d)
 
-		if equipped:
-			btn.text = "EQUIPPED"
-			_style_shop_btn(btn, Color(0.22, 0.48, 0.32))
-			btn.disabled = true
-		elif owned:
-			btn.text = "EQUIP"
-			_style_shop_btn(btn, Color(0.28, 0.58, 0.38))
-			btn.pressed.connect(_equip_hat.bind(hat_id))
-		elif can_afford:
-			btn.text = str(hat["cost"]) + " pts"
-			_style_shop_btn(btn, Color(0.28, 0.52, 0.7))
-			btn.pressed.connect(_buy_hat.bind(hat_id))
+			var btn := Button.new()
+			btn.custom_minimum_size = Vector2(0, btn_h)
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			btn.add_theme_font_size_override("font_size", btn_fs)
+			btn.add_theme_color_override("font_color", Color.WHITE)
+			if equipped:
+				btn.text = "EQUIPPED"
+				_style_shop_btn(btn, Color(0.22, 0.48, 0.32))
+				btn.disabled = true
+			elif owned:
+				btn.text = "EQUIP"
+				_style_shop_btn(btn, Color(0.28, 0.58, 0.38))
+				btn.pressed.connect(_equip_hat.bind(hat_id))
+			elif can_afford:
+				btn.text = str(hat["cost"]) + " pts"
+				_style_shop_btn(btn, Color(0.28, 0.52, 0.7))
+				btn.pressed.connect(_buy_hat.bind(hat_id))
+			else:
+				btn.text = str(hat["cost"]) + " pts"
+				_style_shop_btn(btn, Color(0.25, 0.27, 0.32))
+				btn.disabled = true
+			outer_vbox.add_child(btn)
+
 		else:
-			btn.text = str(hat["cost"]) + " pts"
-			_style_shop_btn(btn, Color(0.25, 0.27, 0.32))
-			btn.disabled = true
+			# PC layout: icon + info + button all in one HBox row
+			var hbox := HBoxContainer.new()
+			hbox.add_theme_constant_override("separation", hbox_sep)
+			item.add_child(hbox)
 
-		hbox.add_child(btn)
+			var icon := TextureRect.new()
+			icon.custom_minimum_size = Vector2(icon_sz, icon_sz)
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			var tex_path := hat.get("tex", "") as String
+			if tex_path != "":
+				var tex = load(tex_path)
+				if tex:
+					icon.texture = tex
+			hbox.add_child(icon)
+
+			var info := VBoxContainer.new()
+			info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			info.add_theme_constant_override("separation", 3)
+			hbox.add_child(info)
+
+			var n := Label.new()
+			n.text = hat["name"]
+			n.add_theme_font_size_override("font_size", name_fs)
+			n.add_theme_color_override("font_color", Color.WHITE if owned else Color(0.82, 0.82, 0.88))
+			info.add_child(n)
+
+			var d := Label.new()
+			d.text = hat["desc"]
+			d.add_theme_font_size_override("font_size", desc_fs)
+			d.add_theme_color_override("font_color", Color(0.48, 0.5, 0.58))
+			info.add_child(d)
+
+			var btn := Button.new()
+			btn.custom_minimum_size = Vector2(btn_w, btn_h)
+			btn.add_theme_font_size_override("font_size", btn_fs)
+			btn.add_theme_color_override("font_color", Color.WHITE)
+			if equipped:
+				btn.text = "EQUIPPED"
+				_style_shop_btn(btn, Color(0.22, 0.48, 0.32))
+				btn.disabled = true
+			elif owned:
+				btn.text = "EQUIP"
+				_style_shop_btn(btn, Color(0.28, 0.58, 0.38))
+				btn.pressed.connect(_equip_hat.bind(hat_id))
+			elif can_afford:
+				btn.text = str(hat["cost"]) + " pts"
+				_style_shop_btn(btn, Color(0.28, 0.52, 0.7))
+				btn.pressed.connect(_buy_hat.bind(hat_id))
+			else:
+				btn.text = str(hat["cost"]) + " pts"
+				_style_shop_btn(btn, Color(0.25, 0.27, 0.32))
+				btn.disabled = true
+			hbox.add_child(btn)
+
 		shop_content.add_child(item)
 
 func _style_shop_btn(btn: Button, color: Color) -> void:
@@ -977,9 +1433,14 @@ func _add_modal_divider(vbox: VBoxContainer) -> void:
 func _create_modal_button(text: String, color: Color, dark_color: Color) -> Button:
 	var btn = Button.new()
 	btn.text = text
-	btn.custom_minimum_size = Vector2(220, 44)
-	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_size_override("font_size", 15)
+	if GameSettings.is_mobile:
+		btn.custom_minimum_size = Vector2(0, 80)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", 32)
+	else:
+		btn.custom_minimum_size = Vector2(220, 44)
+		btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		btn.add_theme_font_size_override("font_size", 15)
 	btn.add_theme_color_override("font_color", Color.WHITE)
 
 	var normal = StyleBoxFlat.new()
@@ -1077,6 +1538,9 @@ func _setup_floating_bg(parent: Control) -> void:
 	container.clip_contents = true
 	parent.add_child(container)
 
+	var vp_sz := get_viewport().get_visible_rect().size
+	if vp_sz.x < 1:
+		vp_sz = Vector2(1920, 1080)
 	for i in 50:
 		var tex = piece_textures[randi() % piece_textures.size()]
 		var spr = TextureRect.new()
@@ -1087,7 +1551,7 @@ func _setup_floating_bg(parent: Control) -> void:
 		spr.size = spr.custom_minimum_size
 		spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		spr.modulate = Color(1.0, 1.0, 1.0, randf_range(0.02, 0.055))
-		spr.position = Vector2(randf_range(0, 1920), randf_range(0, 1080))
+		spr.position = Vector2(randf_range(0, vp_sz.x), randf_range(0, vp_sz.y))
 		spr.pivot_offset = spr.size / 2.0
 		spr.rotation = randf_range(0, TAU)
 		container.add_child(spr)
@@ -1210,32 +1674,64 @@ func _show_profile_popup(data: Dictionary, is_own: bool = false, start_mode: Str
 			child.queue_free()
 	profile_popup.visible = true
 
-	var center = CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	profile_popup.add_child(center)
-
-	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(540, 0)
-	var cs = StyleBoxFlat.new()
+	var card := PanelContainer.new()
+	var cs := StyleBoxFlat.new()
 	cs.bg_color = Color(0.06, 0.07, 0.12)
 	cs.set_corner_radius_all(18)
 	cs.border_color = Color(0.28, 0.32, 0.52)
 	cs.set_border_width_all(2)
-	cs.set_content_margin_all(32)
+	cs.set_content_margin_all(20 if GameSettings.is_mobile else 32)
 	card.add_theme_stylebox_override("panel", cs)
-	center.add_child(card)
 
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
-	card.add_child(vbox)
+	if GameSettings.is_mobile:
+		var r_pr := DisplayServer.get_display_safe_area()
+		var stp: int = maxi(r_pr.position.y, 40)
+		var pm := MarginContainer.new()
+		pm.set_anchors_preset(Control.PRESET_FULL_RECT)
+		pm.add_theme_constant_override("margin_left",   20)
+		pm.add_theme_constant_override("margin_right",  20)
+		pm.add_theme_constant_override("margin_top",    stp + 16)
+		pm.add_theme_constant_override("margin_bottom", 20)
+		profile_popup.add_child(pm)
+		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		card.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		pm.add_child(card)
+	else:
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		profile_popup.add_child(center)
+		card.custom_minimum_size = Vector2(540, 0)
+		center.add_child(card)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12 if GameSettings.is_mobile else 8)
+	if GameSettings.is_mobile:
+		var scroll_p := ScrollContainer.new()
+		scroll_p.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_p.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		scroll_p.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		card.add_child(scroll_p)
+		vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll_p.add_child(vbox)
+	else:
+		card.add_child(vbox)
 
 	# ── Name ──
 	var name_lbl = Label.new()
 	name_lbl.text = data.get("name", "???")
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_font_size_override("font_size", 42)
+	name_lbl.add_theme_font_size_override("font_size", 52 if GameSettings.is_mobile else 42)
 	name_lbl.add_theme_color_override("font_color", Color.WHITE)
 	vbox.add_child(name_lbl)
+
+	# ── Solo score shown under name for quick preview ──
+	var hs_preview: int = int(data.get("solo_highscore", 0))
+	var score_sub := Label.new()
+	score_sub.text = "Best Score: " + (str(hs_preview) if hs_preview > 0 else "—")
+	score_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_sub.add_theme_font_size_override("font_size", 26 if GameSettings.is_mobile else 18)
+	score_sub.add_theme_color_override("font_color", Color(0.9, 0.78, 0.3))
+	vbox.add_child(score_sub)
 
 	# ── Name-change (own profile only) ──
 	if is_own:
@@ -1347,12 +1843,32 @@ func _show_profile_popup(data: Dictionary, is_own: bool = false, start_mode: Str
 	vbox.add_child(hist_vbox)
 
 	_add_spacer(vbox, 10)
-	var close_hint = Label.new()
-	close_hint.text = "ESC or click outside to close"
-	close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	close_hint.add_theme_font_size_override("font_size", 14)
-	close_hint.add_theme_color_override("font_color", Color(0.3, 0.3, 0.42))
-	vbox.add_child(close_hint)
+	if GameSettings.is_mobile:
+		var close_btn := Button.new()
+		close_btn.text = "CLOSE"
+		close_btn.custom_minimum_size = Vector2(0, 72)
+		close_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		close_btn.add_theme_font_size_override("font_size", 28)
+		close_btn.add_theme_color_override("font_color", Color.WHITE)
+		var cbn := StyleBoxFlat.new()
+		cbn.bg_color = Color(0.15, 0.17, 0.28)
+		cbn.set_corner_radius_all(10)
+		cbn.border_color = Color(0.3, 0.33, 0.52)
+		cbn.set_border_width_all(2)
+		close_btn.add_theme_stylebox_override("normal", cbn)
+		var cbh := cbn.duplicate() as StyleBoxFlat
+		cbh.bg_color = Color(0.2, 0.22, 0.38)
+		close_btn.add_theme_stylebox_override("hover", cbh)
+		close_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+		close_btn.pressed.connect(func(): profile_popup.visible = false)
+		vbox.add_child(close_btn)
+	else:
+		var close_hint := Label.new()
+		close_hint.text = "ESC or click outside to close"
+		close_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		close_hint.add_theme_font_size_override("font_size", 14)
+		close_hint.add_theme_color_override("font_color", Color(0.3, 0.3, 0.42))
+		vbox.add_child(close_hint)
 
 	# Refresh function
 	var refresh_fn = func(mode: String) -> void:
@@ -1404,11 +1920,12 @@ func _build_profile_history(mode: String, data: Dictionary, hv: VBoxContainer) -
 			filtered.append(m)
 	filtered.reverse()
 	var count = mini(filtered.size(), 6)
+	var hist_font := 20 if GameSettings.is_mobile else 16
 	if count == 0:
 		var lbl = Label.new()
 		lbl.text = "No matches yet in this mode."
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.add_theme_font_size_override("font_size", hist_font)
 		lbl.add_theme_color_override("font_color", Color(0.38, 0.38, 0.5))
 		hv.add_child(lbl)
 		return
@@ -1425,14 +1942,15 @@ func _build_profile_history(mode: String, data: Dictionary, hv: VBoxContainer) -
 		rs.set_corner_radius_all(8)
 		rs.border_color = Color(col.r, col.g, col.b, 0.3)
 		rs.set_border_width_all(1)
-		rs.set_content_margin_all(8)
+		rs.set_content_margin_all(8 if not GameSettings.is_mobile else 14)
 		row.add_theme_stylebox_override("panel", rs)
 		var lbl = Label.new()
 		lbl.text = res.to_upper() + "   " + str(m.get("my_score", 0)) + " – " + \
 				   str(m.get("opp_score", 0)) + "   vs " + m.get("opponent", "???") + \
 				   "   (" + ec_str + " ELO)"
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 16)
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.add_theme_font_size_override("font_size", hist_font)
 		lbl.add_theme_color_override("font_color", col)
 		row.add_child(lbl)
 		hv.add_child(row)
@@ -1441,18 +1959,20 @@ func _add_profile_stat(parent: VBoxContainer, label: String, value: String, colo
 	var hbox = HBoxContainer.new()
 	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_theme_constant_override("separation", 12)
-	hbox.custom_minimum_size = Vector2(0, 32)
+	hbox.custom_minimum_size = Vector2(0, 40 if GameSettings.is_mobile else 32)
 	parent.add_child(hbox)
+	var key_font := 24 if GameSettings.is_mobile else 19
+	var val_font := 26 if GameSettings.is_mobile else 20
 	var key = Label.new()
 	key.text = label + ":"
-	key.add_theme_font_size_override("font_size", 19)
+	key.add_theme_font_size_override("font_size", key_font)
 	key.add_theme_color_override("font_color", Color(0.48, 0.48, 0.62))
-	key.custom_minimum_size = Vector2(150, 0)
+	key.custom_minimum_size = Vector2(180 if GameSettings.is_mobile else 150, 0)
 	key.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hbox.add_child(key)
 	var val = Label.new()
 	val.text = value
-	val.add_theme_font_size_override("font_size", 20)
+	val.add_theme_font_size_override("font_size", val_font)
 	val.add_theme_color_override("font_color", color)
 	val.custom_minimum_size = Vector2(160, 0)
 	hbox.add_child(val)
@@ -1460,8 +1980,13 @@ func _add_profile_stat(parent: VBoxContainer, label: String, value: String, colo
 func _create_profile_tab_btn(label: String) -> Button:
 	var btn = Button.new()
 	btn.text = label
-	btn.custom_minimum_size = Vector2(130, 48)
-	btn.add_theme_font_size_override("font_size", 17)
+	if GameSettings.is_mobile:
+		btn.custom_minimum_size = Vector2(0, 64)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.add_theme_font_size_override("font_size", 22)
+	else:
+		btn.custom_minimum_size = Vector2(130, 48)
+		btn.add_theme_font_size_override("font_size", 17)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_style_profile_tab_btn(btn, false)
 	return btn

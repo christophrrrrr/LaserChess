@@ -89,6 +89,14 @@ func _ready() -> void:
 	back_button.pressed.connect(_on_back_button_pressed)
 	_connect_signals()
 
+	# Screen shake
+	game_board.player_hit.connect(func(): $Camera2D.shake(5.0, 0.20))
+	game_board.score_changed.connect(func(_s): $Camera2D.shake(1.8, 0.10))
+
+	# Adaptive layout (portrait ↔ landscape)
+	get_viewport().size_changed.connect(_apply_layout)
+	_apply_layout()
+
 	timer_label.text = _format_time(match_duration)
 	_show_connecting()
 	NetworkManager.connect_to_server()
@@ -206,7 +214,7 @@ func _apply_styles() -> void:
 	my_panel.add_theme_stylebox_override("panel", my_style)
 
 	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_color_override("font_color", my_color.darkened(0.1))
-	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_font_size_override("font_size", 14)
+	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_font_size_override("font_size", 18)
 	$MatchHUD/MyPanel/VBox.add_theme_constant_override("separation", 4)
 
 	var my_ls := LabelSettings.new()
@@ -222,6 +230,7 @@ func _apply_styles() -> void:
 	my_king_rect.texture = load(GameSettings.get_player_king_texture())
 	my_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	my_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	my_king_rect.custom_minimum_size = Vector2(48, 48)
 
 	# ── OPP panel (red-orange) ──
 	var opp_color := Color(1.0, 0.38, 0.2)
@@ -234,7 +243,7 @@ func _apply_styles() -> void:
 	opp_panel.add_theme_stylebox_override("panel", opp_style)
 
 	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_color_override("font_color", opp_color.darkened(0.1))
-	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_font_size_override("font_size", 14)
+	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_font_size_override("font_size", 18)
 	$MatchHUD/OppPanel/VBox.add_theme_constant_override("separation", 4)
 
 	var opp_ls := LabelSettings.new()
@@ -251,6 +260,7 @@ func _apply_styles() -> void:
 	opp_king_rect.texture = load(opp_tex_path)
 	opp_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	opp_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	opp_king_rect.custom_minimum_size = Vector2(48, 48)
 
 	# ── Back button ──
 	var btn_normal := StyleBoxFlat.new()
@@ -274,13 +284,123 @@ func _apply_styles() -> void:
 	back_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 # =====================
+# ADAPTIVE LAYOUT
+# =====================
+
+func _apply_layout() -> void:
+	var vp_size := get_viewport().get_visible_rect().size
+	var is_portrait := vp_size.y > vp_size.x
+
+	var safe_top := 0
+	if GameSettings.is_mobile:
+		var r := DisplayServer.get_display_safe_area()
+		safe_top = maxi(r.position.y, 0)
+
+	# Push lobby card below the phone camera notch
+	var lobby_center := $MatchHUD/LobbyContainer/LobbyCenter as Control
+	if is_instance_valid(lobby_center):
+		lobby_center.offset_top = float(safe_top)
+
+	if is_portrait:
+		# Compact top-corner strips — panels sit in the space above/below the board
+		my_panel.set_anchor(SIDE_LEFT,   0.0, false, false)
+		my_panel.set_anchor(SIDE_TOP,    0.0, false, false)
+		my_panel.set_anchor(SIDE_RIGHT,  0.0, false, false)
+		my_panel.set_anchor(SIDE_BOTTOM, 0.0, false, false)
+		my_panel.offset_left   = 8.0
+		my_panel.offset_top    = 8.0 + safe_top
+		my_panel.offset_right  = 160.0
+		my_panel.offset_bottom = 98.0 + safe_top
+		my_panel.custom_minimum_size = Vector2(0.0, 0.0)
+
+		opp_panel.set_anchor(SIDE_LEFT,   1.0, false, false)
+		opp_panel.set_anchor(SIDE_TOP,    0.0, false, false)
+		opp_panel.set_anchor(SIDE_RIGHT,  1.0, false, false)
+		opp_panel.set_anchor(SIDE_BOTTOM, 0.0, false, false)
+		opp_panel.offset_left   = -160.0
+		opp_panel.offset_top    = 8.0 + safe_top
+		opp_panel.offset_right  = -8.0
+		opp_panel.offset_bottom = 98.0 + safe_top
+		opp_panel.custom_minimum_size = Vector2(0.0, 0.0)
+
+		timer_label.offset_top    = 12.0 + safe_top
+		timer_label.offset_bottom = 52.0 + safe_top
+
+		spectate_label.offset_top    = 55.0 + safe_top
+		spectate_label.offset_bottom = 88.0 + safe_top
+
+		# Shrink score font to fit the compact strip
+		if my_score_label.label_settings:
+			my_score_label.label_settings.font_size = 32
+		if opponent_score_label.label_settings:
+			opponent_score_label.label_settings.font_size = 32
+		# King icon is too tall for the compact portrait panel — hide it
+		my_king_rect.visible  = false
+		opp_king_rect.visible = false
+
+		# Back button: top-left, same as landscape
+		back_button.anchor_top    = 0.0
+		back_button.anchor_bottom = 0.0
+		back_button.anchor_left   = 0.0
+		back_button.anchor_right  = 0.0
+		back_button.offset_left   = 20.0
+		back_button.offset_right  = 140.0
+		back_button.offset_top    = 20.0 + safe_top
+		back_button.offset_bottom = 80.0 + safe_top
+	else:
+		# Landscape: panels span full height starting below the back button
+		my_panel.set_anchor(SIDE_LEFT,   0.0, false, false)
+		my_panel.set_anchor(SIDE_TOP,    0.0, false, false)
+		my_panel.set_anchor(SIDE_RIGHT,  0.0, false, false)
+		my_panel.set_anchor(SIDE_BOTTOM, 1.0, false, false)
+		my_panel.offset_left   = 8.0
+		my_panel.offset_top    = 92.0 + safe_top
+		my_panel.offset_right  = 158.0
+		my_panel.offset_bottom = -20.0
+		my_panel.custom_minimum_size = Vector2(0.0, 0.0)
+
+		opp_panel.set_anchor(SIDE_LEFT,   1.0, false, false)
+		opp_panel.set_anchor(SIDE_TOP,    0.0, false, false)
+		opp_panel.set_anchor(SIDE_RIGHT,  1.0, false, false)
+		opp_panel.set_anchor(SIDE_BOTTOM, 1.0, false, false)
+		opp_panel.offset_left   = -158.0
+		opp_panel.offset_top    = 92.0 + safe_top
+		opp_panel.offset_right  = -8.0
+		opp_panel.offset_bottom = -20.0
+		opp_panel.custom_minimum_size = Vector2(0.0, 0.0)
+
+		timer_label.offset_top    = 12.0 + safe_top
+		timer_label.offset_bottom = 52.0 + safe_top
+
+		spectate_label.offset_top    = 55.0 + safe_top
+		spectate_label.offset_bottom = 88.0 + safe_top
+
+		# Reduced score font for better balance in the widened panels
+		if my_score_label.label_settings:
+			my_score_label.label_settings.font_size = 52
+		if opponent_score_label.label_settings:
+			opponent_score_label.label_settings.font_size = 52
+		# Restore king icon visibility in landscape
+		my_king_rect.visible  = true
+		opp_king_rect.visible = true
+
+		# Back button: top-left with safe area offset
+		back_button.anchor_top    = 0.0
+		back_button.anchor_bottom = 0.0
+		back_button.anchor_left   = 0.0
+		back_button.anchor_right  = 0.0
+		back_button.offset_left   = 20.0
+		back_button.offset_right  = 140.0
+		back_button.offset_top    = 20.0 + safe_top
+		back_button.offset_bottom = 80.0 + safe_top
+
+# =====================
 # LOBBY SCREENS
 # =====================
 
 func _clear_lobby() -> void:
 	for child in lobby_content.get_children():
-		lobby_content.remove_child(child)
-		child.queue_free()
+		child.queue_free()  # queue_free removes from parent automatically; don't call remove_child first or looping tweens will log "!is_inside_tree"
 
 func _set_match_hud(show: bool) -> void:
 	timer_label.visible = show
@@ -827,8 +947,7 @@ func _clear_result_content() -> void:
 	for child in result_container.get_children():
 		if child.name == "Overlay":
 			continue
-		result_container.remove_child(child)
-		child.queue_free()
+		child.queue_free()  # don't call remove_child first — looping tweens on freed nodes cause "!is_inside_tree" errors
 
 # =====================
 # INPUT
@@ -935,7 +1054,7 @@ func _on_opponent_ghost_updated(x: int, y: int) -> void:
 # =====================
 
 func _format_time(seconds: float) -> String:
-	var s = max(0, int(ceil(seconds)))
+	var s: int = maxi(0, int(ceil(seconds)))
 	var mins = s / 60
 	var secs = s % 60
 	return str(mins) + ":" + ("0" + str(secs) if secs < 10 else str(secs))

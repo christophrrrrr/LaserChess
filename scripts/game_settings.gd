@@ -15,6 +15,13 @@ var leaderboard_tab: String = "solo"  # "elo" or "solo"
 var leaderboard_elo_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
 var ranked_time_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
 
+# === MOBILE ===
+var control_scheme: String = "d_pad"   # "d_pad" | "swipe"
+var tutorial_complete: bool = false
+## True on Android/iOS, false on PC/macOS/Linux (including the Godot editor).
+## Never saved to disk — recomputed from the OS at every launch.
+var is_mobile: bool = OS.has_feature("mobile")
+
 const SAVE_PATH = "user://settings.cfg"
 
 func _ready() -> void:
@@ -81,6 +88,8 @@ func save_settings() -> void:
 	config.set_value("audio", "master_volume", master_volume)
 	config.set_value("ui", "leaderboard_tab", leaderboard_tab)
 	config.set_value("ui", "leaderboard_elo_mode", leaderboard_elo_mode)
+	config.set_value("mobile", "control_scheme", control_scheme)
+	config.set_value("mobile", "tutorial_complete", tutorial_complete)
 	config.save(SAVE_PATH)
 
 func load_settings() -> void:
@@ -93,6 +102,8 @@ func load_settings() -> void:
 		master_volume = config.get_value("audio", "master_volume", 1.0)
 		leaderboard_tab = config.get_value("ui", "leaderboard_tab", "solo")
 		leaderboard_elo_mode = config.get_value("ui", "leaderboard_elo_mode", "bullet")
+		control_scheme = config.get_value("mobile", "control_scheme", "d_pad")
+		tutorial_complete = config.get_value("mobile", "tutorial_complete", false)
 
 	# Push saved volumes to SoundManager (it's loaded before us as autoload)
 	_apply_volume.call_deferred()
