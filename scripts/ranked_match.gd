@@ -530,7 +530,7 @@ func _show_finding_opponent() -> void:
 	_queue_start_time = Time.get_ticks_msec()
 
 	# ── Mode-specific theming ──
-	const MODE_ICONS := {"bullet": "⚡", "blitz": "🔥", "rapid": "♟"}
+	const MODE_ICONS := {"bullet": "🔫", "blitz": "⚡", "rapid": "⏱"}
 	const MODE_TIMES := {"bullet": "1 : 30  PER SIDE", "blitz": "3 : 00  PER SIDE", "rapid": "5 : 00  PER SIDE"}
 	var mode_color: Color
 	match _time_mode:
