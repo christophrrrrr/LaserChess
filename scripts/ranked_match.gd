@@ -689,20 +689,20 @@ func _add_hat_overlay(king_rect: TextureRect, hat_id: String) -> void:
 		c.queue_free()
 	if hat_id.is_empty() or not PlayerData.SHOP_HATS.has(hat_id):
 		return
-	var tweaks: Dictionary = PlayerData.HAT_TWEAKS.get(hat_id, {})
+	var tweaks: Dictionary = PlayerData.HAT_TWEAKS.get(hat_id, {}) as Dictionary
 	var hat_spr := TextureRect.new()
 	hat_spr.texture = load(PlayerData.SHOP_HATS[hat_id]["tex"])
 	hat_spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	hat_spr.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	var hat_size := 36.0 * tweaks.get("scale", 1.0)
+	var hat_size: float = 36.0 * float(tweaks.get("scale", 1.0))
 	hat_spr.custom_minimum_size = Vector2(hat_size, hat_size)
 	hat_spr.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	var pos_tweak: Vector2 = tweaks.get("pos", Vector2.ZERO) * 0.4
+	var pos_tweak: Vector2 = (tweaks.get("pos", Vector2.ZERO) as Vector2) * 0.4
 	hat_spr.offset_left   = -hat_size * 0.5 + pos_tweak.x
 	hat_spr.offset_right  =  hat_size * 0.5 + pos_tweak.x
 	hat_spr.offset_top    = -hat_size * 0.75 + pos_tweak.y
 	hat_spr.offset_bottom =  hat_size * 0.25 + pos_tweak.y
-	hat_spr.rotation_degrees = tweaks.get("rot_deg", 0.0)
+	hat_spr.rotation_degrees = float(tweaks.get("rot_deg", 0.0))
 	hat_spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hat_spr.z_index = 2
 	king_rect.add_child(hat_spr)
