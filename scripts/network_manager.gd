@@ -29,7 +29,7 @@ const _HEARTBEAT_INTERVAL: float = 25.0
 func _ready() -> void:
 	set_process(false)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if _socket == null:
 		return
 
