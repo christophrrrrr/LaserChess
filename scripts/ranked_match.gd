@@ -88,6 +88,7 @@ func _ready() -> void:
 	player.is_dead = true
 
 	_apply_styles()
+	$ScoreUI.visible = false   # Solo HUD — not needed in ranked (panels show scores)
 	$MatchHUD/MyPanel/VBox/MyNameLabel.text = PlayerData.player_name
 	back_button.pressed.connect(_on_back_button_pressed)
 	_connect_signals()
@@ -229,10 +230,10 @@ func _apply_styles() -> void:
 
 	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_color_override("font_color", my_color.darkened(0.1))
 	$MatchHUD/MyPanel/VBox/MyNameLabel.add_theme_font_size_override("font_size", 18)
-	$MatchHUD/MyPanel/VBox.add_theme_constant_override("separation", 4)
+	$MatchHUD/MyPanel/VBox.add_theme_constant_override("separation", 8)
 
 	var my_ls := LabelSettings.new()
-	my_ls.font_size = 72
+	my_ls.font_size = 56
 	my_ls.font_color = my_color
 	my_ls.outline_size = 3
 	my_ls.outline_color = Color(0.0, 0.25, 0.12)
@@ -244,7 +245,10 @@ func _apply_styles() -> void:
 	my_king_rect.texture = load(GameSettings.get_player_king_texture())
 	my_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	my_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	my_king_rect.custom_minimum_size = Vector2(48, 48)
+	my_king_rect.custom_minimum_size = Vector2(56, 56)
+	my_king_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	my_king_rect.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
+	my_king_rect.clip_contents = false
 
 	# ── OPP panel (red-orange) ──
 	var opp_color := Color(1.0, 0.38, 0.2)
@@ -258,10 +262,10 @@ func _apply_styles() -> void:
 
 	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_color_override("font_color", opp_color.darkened(0.1))
 	$MatchHUD/OppPanel/VBox/OppNameLabel.add_theme_font_size_override("font_size", 18)
-	$MatchHUD/OppPanel/VBox.add_theme_constant_override("separation", 4)
+	$MatchHUD/OppPanel/VBox.add_theme_constant_override("separation", 8)
 
 	var opp_ls := LabelSettings.new()
-	opp_ls.font_size = 72
+	opp_ls.font_size = 56
 	opp_ls.font_color = opp_color
 	opp_ls.outline_size = 3
 	opp_ls.outline_color = Color(0.3, 0.05, 0.0)
@@ -274,7 +278,10 @@ func _apply_styles() -> void:
 	opp_king_rect.texture = load(opp_tex_path)
 	opp_king_rect.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
 	opp_king_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	opp_king_rect.custom_minimum_size = Vector2(48, 48)
+	opp_king_rect.custom_minimum_size = Vector2(56, 56)
+	opp_king_rect.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	opp_king_rect.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
+	opp_king_rect.clip_contents = false
 
 	# ── Back button ──
 	var btn_normal := StyleBoxFlat.new()
@@ -389,11 +396,11 @@ func _apply_layout() -> void:
 		spectate_label.offset_top    = 55.0 + safe_top
 		spectate_label.offset_bottom = 88.0 + safe_top
 
-		# Reduced score font for better balance in the widened panels
+		# Restore landscape score font
 		if my_score_label.label_settings:
-			my_score_label.label_settings.font_size = 52
+			my_score_label.label_settings.font_size = 56
 		if opponent_score_label.label_settings:
-			opponent_score_label.label_settings.font_size = 52
+			opponent_score_label.label_settings.font_size = 56
 		# Restore king icon visibility in landscape
 		my_king_rect.visible  = true
 		opp_king_rect.visible = true
@@ -689,19 +696,32 @@ func _add_hat_overlay(king_rect: TextureRect, hat_id: String) -> void:
 		c.queue_free()
 	if hat_id.is_empty() or not PlayerData.SHOP_HATS.has(hat_id):
 		return
-	var tweaks: Dictionary = PlayerData.HAT_TWEAKS.get(hat_id, {}) as Dictionary
+
+	# Mirror player.gd proportions:
+	#   hat_base_pos_tiles  = Vector2(0, -45)  (hat center above king center)
+	#   hat_base_scale      = 0.40             (hat = 40% of tile)
+	#   menu preview tile   = 80px
+	# We scale to king_rect.custom_minimum_size.y (56px).
+	var king_size: float  = king_rect.custom_minimum_size.y
+	var scale_factor: float = king_size / 80.0   # 56/80 = 0.70
+	var tweaks: Dictionary  = PlayerData.HAT_TWEAKS.get(hat_id, {}) as Dictionary
+	var scale_mul: float    = float(tweaks.get("scale", 1.0))
+	var hat_size: float     = king_size * 0.40 * scale_mul
+	var y_offset: float     = -45.0 * scale_factor                              # above king center
+	var pos_tweak: Vector2  = (tweaks.get("pos", Vector2.ZERO) as Vector2) * scale_factor
+	var x_offset: float     = pos_tweak.x
+
 	var hat_spr := TextureRect.new()
-	hat_spr.texture = load(PlayerData.SHOP_HATS[hat_id]["tex"])
+	hat_spr.texture      = load(PlayerData.SHOP_HATS[hat_id]["tex"])
 	hat_spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	hat_spr.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
-	var hat_size: float = 36.0 * float(tweaks.get("scale", 1.0))
 	hat_spr.custom_minimum_size = Vector2(hat_size, hat_size)
-	hat_spr.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	var pos_tweak: Vector2 = (tweaks.get("pos", Vector2.ZERO) as Vector2) * 0.4
-	hat_spr.offset_left   = -hat_size * 0.5 + pos_tweak.x
-	hat_spr.offset_right  =  hat_size * 0.5 + pos_tweak.x
-	hat_spr.offset_top    = -hat_size * 0.75 + pos_tweak.y
-	hat_spr.offset_bottom =  hat_size * 0.25 + pos_tweak.y
+	# Anchor at center of king_rect; offset upward by y_offset
+	hat_spr.set_anchors_preset(Control.PRESET_CENTER)
+	hat_spr.offset_left   = -hat_size * 0.5 + x_offset
+	hat_spr.offset_right  =  hat_size * 0.5 + x_offset
+	hat_spr.offset_top    = y_offset - hat_size * 0.5
+	hat_spr.offset_bottom = y_offset + hat_size * 0.5
 	hat_spr.rotation_degrees = float(tweaks.get("rot_deg", 0.0))
 	hat_spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hat_spr.z_index = 2
