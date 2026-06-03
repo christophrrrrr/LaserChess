@@ -23,6 +23,8 @@ signal opponent_ghost_updated(x: int, y: int)
 var _socket: WebSocketPeer = null
 var _was_connected: bool = false
 var session_id: int = -1
+var _heartbeat_timer: float = 0.0
+const _HEARTBEAT_INTERVAL: float = 25.0
 
 func _ready() -> void:
 	set_process(false)
@@ -37,6 +39,11 @@ func _process(_delta: float) -> void:
 	if state == WebSocketPeer.STATE_OPEN:
 		if not _was_connected:
 			_was_connected = true
+		# Heartbeat ping — keeps Render.com proxy from killing idle connections
+		_heartbeat_timer += delta
+		if _heartbeat_timer >= _HEARTBEAT_INTERVAL:
+			_heartbeat_timer = 0.0
+			_send({"type": "ping"})
 		while _socket.get_available_packet_count() > 0:
 			var text = _socket.get_packet().get_string_from_utf8()
 			_handle_message(text)
@@ -70,6 +77,7 @@ func disconnect_from_server() -> void:
 		_socket.close()
 	_socket = null
 	_was_connected = false
+	_heartbeat_timer = 0.0
 	set_process(false)
 
 func is_online() -> bool:
@@ -170,3 +178,5 @@ func _handle_message(text: String) -> void:
 			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))
 		"ghost_pos":
 			opponent_ghost_updated.emit(data.get("x", 0), data.get("y", 0))
+		"pong":
+			pass  # heartbeat response — connection is alive

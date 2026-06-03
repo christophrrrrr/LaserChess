@@ -11,6 +11,7 @@ enum State { CONNECTING, LOBBY, COUNTDOWN, PLAYING, RESULTS }
 var current_state: State = State.CONNECTING
 var _time_mode: String = "bullet"
 var match_duration: float = 90.0
+var _connect_retries: int = 0
 
 # === NODE REFERENCES ===
 var game_board: Node2D
@@ -127,7 +128,14 @@ func _on_connected() -> void:
 	_show_finding_opponent()
 
 func _on_connection_failed() -> void:
-	_show_error("Could not connect to server.\nCheck your internet connection.")
+	if _connect_retries < 2:
+		_connect_retries += 1
+		_show_error("Connecting to server... (attempt " + str(_connect_retries + 1) + " of 3)")
+		await get_tree().create_timer(4.0).timeout
+		if current_state == State.CONNECTING:
+			NetworkManager.connect_to_server()
+	else:
+		_show_error("Could not connect to server.\nCheck your internet connection.")
 
 func _on_disconnected() -> void:
 	if current_state == State.PLAYING or current_state == State.COUNTDOWN:

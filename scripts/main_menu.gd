@@ -48,6 +48,8 @@ var piece_textures: Array = []
 
 func _ready() -> void:
 	if not GameSettings.tutorial_complete:
+		GameSettings.tutorial_complete = true
+		GameSettings.save_settings()
 		get_tree().change_scene_to_file("res://scenes/tutorial.tscn")
 		return
 

@@ -16,7 +16,7 @@ var leaderboard_elo_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
 var ranked_time_mode: String = "bullet"  # "bullet" | "blitz" | "rapid"
 
 # === MOBILE ===
-var control_scheme: String = "d_pad"   # "d_pad" | "swipe"
+var control_scheme: String = "swipe"   # "d_pad" | "swipe"
 var tutorial_complete: bool = false
 ## True on Android/iOS, false on PC/macOS/Linux (including the Godot editor).
 ## Never saved to disk — recomputed from the OS at every launch.
@@ -102,7 +102,7 @@ func load_settings() -> void:
 		master_volume = config.get_value("audio", "master_volume", 1.0)
 		leaderboard_tab = config.get_value("ui", "leaderboard_tab", "solo")
 		leaderboard_elo_mode = config.get_value("ui", "leaderboard_elo_mode", "bullet")
-		control_scheme = config.get_value("mobile", "control_scheme", "d_pad")
+		control_scheme = config.get_value("mobile", "control_scheme", "swipe")
 		tutorial_complete = config.get_value("mobile", "tutorial_complete", false)
 
 	# Push saved volumes to SoundManager (it's loaded before us as autoload)

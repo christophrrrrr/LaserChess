@@ -183,25 +183,29 @@ func _star_points(center: Vector2, size: float) -> PackedVector2Array:
 # INPUT
 # =====================
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		_keys_this_frame.append(event.keycode)
-	
-	# === TOUCH INPUT HANDLING (swipe mode only — d_pad uses TouchScreenButton nodes) ===
+func _input(event: InputEvent) -> void:
+	# Touch/swipe must use _input (not _unhandled_input) so board tile ColorRects
+	# (which default to MOUSE_FILTER_STOP) don't consume the event first.
 	if event is InputEventScreenTouch and GameSettings.control_scheme == "swipe":
 		if event.pressed:
-			# Finger down - start tracking
+			# Finger down — start tracking
 			if not _is_touching:
 				_is_touching = true
 				_touch_index = event.index
 				_touch_start_pos = event.position
 				_touch_start_time = Time.get_ticks_msec() / 1000.0
 		else:
-			# Finger up - check for swipe or tap
+			# Finger up — check for swipe or tap
 			if _is_touching and event.index == _touch_index:
 				_handle_touch_release(event.position)
 				_is_touching = false
 				_touch_index = -1
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Keyboard only — _unhandled_input is correct here so keys typed in
+	# text fields (e.g. name-change box) don't also move the player.
+	if event is InputEventKey and event.pressed and not event.echo:
+		_keys_this_frame.append(event.keycode)
 
 func _handle_touch_release(end_pos: Vector2) -> void:
 	if is_moving or is_dead:
