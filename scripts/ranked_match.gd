@@ -12,6 +12,8 @@ var current_state: State = State.CONNECTING
 var _time_mode: String = "bullet"
 var match_duration: float = 90.0
 var _connect_retries: int = 0
+var _match_server_time: float = 0.0
+var _opponent_hat: String = ""
 
 # === NODE REFERENCES ===
 var game_board: Node2D
@@ -147,7 +149,7 @@ func _on_disconnected() -> void:
 	elif current_state != State.RESULTS:
 		_show_error("Disconnected from server.")
 
-func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: String, time_mode: String) -> void:
+func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: String, time_mode: String, opp_hat: String, server_time: float) -> void:
 	_time_mode = time_mode
 	match_duration = MODE_DURATIONS.get(time_mode, 90.0)
 	match_time_remaining = match_duration
@@ -155,11 +157,15 @@ func _on_match_started(seed_val: int, opp_name: String, opp_elo: int, opp_pid: S
 	opponent_name = opp_name
 	opponent_elo = opp_elo
 	opponent_player_id = opp_pid
+	_match_server_time = server_time
+	_opponent_hat = opp_hat
 	_finding_label = null
 	_elo_range_label = null
 	_queue_timer_label = null
 	_dot_labels.clear()
 	opp_name_label.text = opp_name + " · " + str(opp_elo)
+	_add_hat_overlay(my_king_rect, PlayerData.equipped_hat)
+	_add_hat_overlay(opp_king_rect, opp_hat)
 	_start_countdown()
 
 func _on_opponent_score(best_score: int) -> void:
@@ -677,9 +683,39 @@ func _start_countdown() -> void:
 	)
 	_start_match()
 
+func _add_hat_overlay(king_rect: TextureRect, hat_id: String) -> void:
+	# Remove any previous hat overlay
+	for c in king_rect.get_children():
+		c.queue_free()
+	if hat_id.is_empty() or not PlayerData.SHOP_HATS.has(hat_id):
+		return
+	var tweaks: Dictionary = PlayerData.HAT_TWEAKS.get(hat_id, {})
+	var hat_spr := TextureRect.new()
+	hat_spr.texture = load(PlayerData.SHOP_HATS[hat_id]["tex"])
+	hat_spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	hat_spr.expand_mode  = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	var hat_size := 36.0 * tweaks.get("scale", 1.0)
+	hat_spr.custom_minimum_size = Vector2(hat_size, hat_size)
+	hat_spr.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	var pos_tweak: Vector2 = tweaks.get("pos", Vector2.ZERO) * 0.4
+	hat_spr.offset_left   = -hat_size * 0.5 + pos_tweak.x
+	hat_spr.offset_right  =  hat_size * 0.5 + pos_tweak.x
+	hat_spr.offset_top    = -hat_size * 0.75 + pos_tweak.y
+	hat_spr.offset_bottom =  hat_size * 0.25 + pos_tweak.y
+	hat_spr.rotation_degrees = tweaks.get("rot_deg", 0.0)
+	hat_spr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hat_spr.z_index = 2
+	king_rect.add_child(hat_spr)
+
 func _start_match() -> void:
 	current_state = State.PLAYING
-	match_time_remaining = match_duration
+	# Sync timer to server clock so both clients show the same time.
+	# server_time is set when the server sent match_start to both players.
+	if _match_server_time > 0.0:
+		var elapsed := Time.get_unix_time_from_system() - _match_server_time
+		match_time_remaining = maxf(match_duration - elapsed, 1.0)
+	else:
+		match_time_remaining = match_duration
 
 	game_board.set_match_seed(match_seed)
 	player.is_dead = false

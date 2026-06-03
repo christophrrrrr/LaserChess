@@ -13,7 +13,7 @@ signal connection_failed()
 signal disconnected_from_server()
 signal queued(time_mode: String)
 signal queue_cancelled()
-signal match_started(seed_val: int, opponent_name: String, opponent_elo: int, opponent_player_id: String, time_mode: String)
+signal match_started(seed_val: int, opponent_name: String, opponent_elo: int, opponent_player_id: String, time_mode: String, opponent_hat: String, server_time: float)
 signal opponent_score_updated(best_score: int)
 signal match_result_received(result: String, my_score: int, opp_score: int, elo_change: int, opp_name: String, opp_elo: int, opp_player_id: String)
 signal opponent_disconnected_sig(elo_change: int, my_score: int, opp_score: int, opp_name: String, opp_elo: int, opp_player_id: String)
@@ -92,6 +92,7 @@ func queue_for_match(time_mode: String) -> void:
 		"elo_bullet": PlayerData.elo_bullet,
 		"elo_blitz":  PlayerData.elo_blitz,
 		"elo_rapid":  PlayerData.elo_rapid,
+		"hat":        PlayerData.equipped_hat,
 	})
 
 func leave_queue() -> void:
@@ -151,7 +152,9 @@ func _handle_message(text: String) -> void:
 				data.get("opponent", "???"),
 				data.get("opponent_elo", 1000),
 				data.get("opponent_player_id", ""),
-				data.get("time_mode", "bullet")
+				data.get("time_mode", "bullet"),
+				data.get("opponent_hat", ""),
+				data.get("server_time", 0.0)
 			)
 		"opponent_score":
 			opponent_score_updated.emit(data.get("best_score", 0))
