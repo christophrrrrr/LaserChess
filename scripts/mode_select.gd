@@ -40,18 +40,40 @@ func _build_ui() -> void:
 	_hud.layer = 10
 	add_child(_hud)
 
+	# Safe-area top offset (notch/status bar) — used by header + back button
+	var safe_top := 0
+	if GameSettings.is_mobile:
+		var r_safe := DisplayServer.get_display_safe_area()
+		safe_top = maxi(r_safe.position.y, 72)
+
 	# Background
 	var bg = ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.03, 0.03, 0.08)
 	_hud.add_child(bg)
 
+	# Header strip + divider — anchors the title and back button so they
+	# don't float over the content (same look as the leaderboard header)
+	var header_h := 112 + safe_top
+	var header_bg = ColorRect.new()
+	header_bg.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	header_bg.offset_bottom = float(header_h)
+	header_bg.color = Color(0.04, 0.05, 0.11)
+	_hud.add_child(header_bg)
+
+	var header_divider = ColorRect.new()
+	header_divider.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	header_divider.offset_top = float(header_h)
+	header_divider.offset_bottom = float(header_h + 1)
+	header_divider.color = Color(0.22, 0.22, 0.38, 0.5)
+	_hud.add_child(header_divider)
+
 	# Title
 	var title = Label.new()
 	title.text = "RANKED MODE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	title.position = Vector2(-160, 30)
+	title.position = Vector2(-160, 16 + safe_top)
 	title.custom_minimum_size = Vector2(320, 0)
 	title.add_theme_font_size_override("font_size", 42)
 	title.add_theme_color_override("font_color", Color(0.85, 0.55, 0.1))
@@ -61,7 +83,7 @@ func _build_ui() -> void:
 	subtitle.text = "Choose your time control"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	subtitle.position = Vector2(-160, 82)
+	subtitle.position = Vector2(-160, 70 + safe_top)
 	subtitle.custom_minimum_size = Vector2(320, 0)
 	subtitle.add_theme_font_size_override("font_size", 18)
 	subtitle.add_theme_color_override("font_color", Color(0.45, 0.45, 0.55))
@@ -77,7 +99,7 @@ func _build_ui() -> void:
 		card_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 		card_margin.add_theme_constant_override("margin_left",   24)
 		card_margin.add_theme_constant_override("margin_right",  24)
-		card_margin.add_theme_constant_override("margin_top",    130)  # below title area
+		card_margin.add_theme_constant_override("margin_top",    header_h + 16)  # below header strip
 		card_margin.add_theme_constant_override("margin_bottom", 20)
 		_hud.add_child(card_margin)
 
@@ -117,18 +139,19 @@ func _build_ui() -> void:
 	back_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	back_layer.add_child(back_root)
 
-	var safe_top_ms := 0
-	if GameSettings.is_mobile:
-		var r_ms := DisplayServer.get_display_safe_area()
-		safe_top_ms = maxi(r_ms.position.y, 72)
-
+	# Pill chip inside the header, vertically aligned with the title
 	var back_btn = Button.new()
 	back_btn.text = "< BACK"
 	back_btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	back_btn.position = Vector2(20, 20 + safe_top_ms)
-	back_btn.custom_minimum_size = Vector2(120, 50) if not GameSettings.is_mobile else Vector2(160, 80)
-	back_btn.add_theme_font_size_override("font_size", 20 if not GameSettings.is_mobile else 28)
-	back_btn.add_theme_color_override("font_color", Color.WHITE)
+	if GameSettings.is_mobile:
+		back_btn.custom_minimum_size = Vector2(140, 64)
+		back_btn.add_theme_font_size_override("font_size", 24)
+		back_btn.position = Vector2(20, 12 + safe_top)
+	else:
+		back_btn.custom_minimum_size = Vector2(110, 48)
+		back_btn.add_theme_font_size_override("font_size", 18)
+		back_btn.position = Vector2(20, 20 + safe_top)
+	back_btn.add_theme_color_override("font_color", Color(0.85, 0.87, 0.95))
 	_style_back_button(back_btn)
 	back_btn.pressed.connect(_on_back_pressed)
 	back_root.add_child(back_btn)
@@ -263,23 +286,26 @@ func _style_play_button(btn: Button, accent: Color) -> void:
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 func _style_back_button(btn: Button) -> void:
+	# Pill shape: radius = half the button height
+	var radius := int(btn.custom_minimum_size.y / 2.0)
+
 	var normal = StyleBoxFlat.new()
-	normal.bg_color = Color(0.1, 0.1, 0.15, 0.85)
-	normal.set_corner_radius_all(10)
-	normal.border_color = Color(0.3, 0.3, 0.4, 0.9)
-	normal.set_border_width_all(2)
+	normal.bg_color = Color(0.09, 0.10, 0.16, 0.9)
+	normal.set_corner_radius_all(radius)
+	normal.border_color = Color(0.32, 0.34, 0.48, 0.55)
+	normal.set_border_width_all(1)
 	btn.add_theme_stylebox_override("normal", normal)
 
 	var hover = StyleBoxFlat.new()
-	hover.bg_color = Color(0.15, 0.15, 0.22, 0.95)
-	hover.set_corner_radius_all(10)
-	hover.border_color = Color(0.45, 0.45, 0.55, 1.0)
-	hover.set_border_width_all(2)
+	hover.bg_color = Color(0.14, 0.15, 0.22, 0.95)
+	hover.set_corner_radius_all(radius)
+	hover.border_color = Color(0.50, 0.52, 0.66, 0.8)
+	hover.set_border_width_all(1)
 	btn.add_theme_stylebox_override("hover", hover)
 
 	var pressed_s = StyleBoxFlat.new()
-	pressed_s.bg_color = Color(0.08, 0.08, 0.12, 0.95)
-	pressed_s.set_corner_radius_all(10)
+	pressed_s.bg_color = Color(0.06, 0.07, 0.11, 0.95)
+	pressed_s.set_corner_radius_all(radius)
 	btn.add_theme_stylebox_override("pressed", pressed_s)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 

@@ -10,6 +10,7 @@ extends Control
 var settings_panel: Control
 var shop_panel: Control
 var profile_popup: Control
+var _tutorial_confirm_layer: CanvasLayer = null
 
 # Settings
 var color_toggle_button: Button
@@ -58,7 +59,6 @@ func _ready() -> void:
 		_build_layout_portrait()
 	else:
 		_build_layout()
-	_add_tutorial_shortcut()
 	_setup_settings_panel()
 	_setup_shop_panel()
 	settings_panel.visible = false
@@ -276,6 +276,9 @@ func _build_layout_portrait() -> void:
 	)
 	vbox.add_child(settings_btn)
 
+	_add_spacer(vbox, 20)
+	vbox.add_child(_create_tutorial_button())
+
 	_add_spacer(vbox, 40)
 
 	# ── Bottom row: VIEW ALL + SHOP ──
@@ -358,18 +361,19 @@ func _create_portrait_button(text: String, color: Color, dark_color: Color) -> B
 	return btn
 
 
-# Floating "?" button in the bottom-right corner (both layouts)
-func _add_tutorial_shortcut() -> void:
+func _create_tutorial_button() -> Button:
+	var btn_size  := 90  if GameSettings.is_mobile else 68
+	var font_size := 34  if GameSettings.is_mobile else 28
+	var radius    := btn_size / 2
 	var btn := Button.new()
 	btn.text = "?"
-	btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	btn.position = Vector2(-108, -108)
-	btn.custom_minimum_size = Vector2(68, 68)
-	btn.add_theme_font_size_override("font_size", 28)
+	btn.custom_minimum_size = Vector2(btn_size, btn_size)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_font_size_override("font_size", font_size)
 	btn.add_theme_color_override("font_color", Color(0.75, 0.78, 0.88))
 	var s := StyleBoxFlat.new()
 	s.bg_color = Color(0.10, 0.11, 0.18, 0.85)
-	s.set_corner_radius_all(34)
+	s.set_corner_radius_all(radius)
 	s.border_color = Color(0.28, 0.32, 0.50, 0.80)
 	s.set_border_width_all(2)
 	btn.add_theme_stylebox_override("normal", s)
@@ -379,9 +383,133 @@ func _add_tutorial_shortcut() -> void:
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	btn.pressed.connect(func():
 		SoundManager.play("click")
+		_show_tutorial_confirm()
+	)
+	return btn
+
+func _show_tutorial_confirm() -> void:
+	if _tutorial_confirm_layer != null:
+		return
+
+	var mobile      := GameSettings.is_mobile
+	var title_fs    := 36  if mobile else 28
+	var body_fs     := 22  if mobile else 16
+	var btn_fs      := 22  if mobile else 16
+	var btn_w       := 150 if mobile else 110
+	var btn_h       := 64  if mobile else 42
+	var padding     := 36  if mobile else 28
+	var separation  := 20  if mobile else 14
+
+	_tutorial_confirm_layer = CanvasLayer.new()
+	_tutorial_confirm_layer.layer = 200
+	add_child(_tutorial_confirm_layer)
+
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.0, 0.0, 0.0, 0.65)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_tutorial_confirm_layer.add_child(backdrop)
+
+	var box := PanelContainer.new()
+	var box_style := StyleBoxFlat.new()
+	box_style.bg_color = Color(0.08, 0.09, 0.13, 0.97)
+	box_style.set_corner_radius_all(16)
+	box_style.border_color = Color(0.28, 0.32, 0.52, 0.9)
+	box_style.set_border_width_all(2)
+	box_style.set_content_margin_all(padding)
+	box.add_theme_stylebox_override("panel", box_style)
+
+	if mobile:
+		# Full-width card anchored low on the screen, with safe-area respect
+		var safe_top := maxi(int(DisplayServer.get_display_safe_area().position.y), 60)
+		var mc := MarginContainer.new()
+		mc.set_anchors_preset(Control.PRESET_FULL_RECT)
+		mc.add_theme_constant_override("margin_left",   24)
+		mc.add_theme_constant_override("margin_right",  24)
+		mc.add_theme_constant_override("margin_top",    safe_top)
+		mc.add_theme_constant_override("margin_bottom", 24)
+		_tutorial_confirm_layer.add_child(mc)
+		# Wrap in a CenterContainer so it stays vertically centered in the margin area
+		var center := CenterContainer.new()
+		center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.size_flags_vertical   = Control.SIZE_EXPAND_FILL
+		mc.add_child(center)
+		box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		center.add_child(box)
+	else:
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_tutorial_confirm_layer.add_child(center)
+		box.custom_minimum_size = Vector2(320, 0)
+		center.add_child(box)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", separation)
+	box.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Tutorial"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", title_fs)
+	title.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	vbox.add_child(title)
+
+	var body := Label.new()
+	body.text = "Do you want to replay the tutorial?"
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("font_size", body_fs)
+	body.add_theme_color_override("font_color", Color(0.65, 0.65, 0.75))
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(body)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 4)
+	vbox.add_child(spacer)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 16 if mobile else 12)
+	vbox.add_child(btn_row)
+
+	var yes_btn := Button.new()
+	yes_btn.text = "YES"
+	yes_btn.custom_minimum_size = Vector2(btn_w, btn_h)
+	var yes_style := StyleBoxFlat.new()
+	yes_style.bg_color = Color(0.12, 0.35, 0.18, 0.95)
+	yes_style.set_corner_radius_all(10)
+	yes_style.border_color = Color(0.2, 0.8, 0.4, 0.8)
+	yes_style.set_border_width_all(2)
+	yes_btn.add_theme_stylebox_override("normal", yes_style)
+	yes_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	yes_btn.add_theme_font_size_override("font_size", btn_fs)
+	yes_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.55))
+	yes_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_tutorial_confirm_layer.queue_free()
+		_tutorial_confirm_layer = null
 		get_tree().change_scene_to_file("res://scenes/tutorial.tscn")
 	)
-	add_child(btn)
+	btn_row.add_child(yes_btn)
+
+	var no_btn := Button.new()
+	no_btn.text = "NO"
+	no_btn.custom_minimum_size = Vector2(btn_w, btn_h)
+	var no_style := StyleBoxFlat.new()
+	no_style.bg_color = Color(0.35, 0.08, 0.06, 0.95)
+	no_style.set_corner_radius_all(10)
+	no_style.border_color = Color(0.85, 0.2, 0.15, 0.8)
+	no_style.set_border_width_all(2)
+	no_btn.add_theme_stylebox_override("normal", no_style)
+	no_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	no_btn.add_theme_font_size_override("font_size", 16)
+	no_btn.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
+	no_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_tutorial_confirm_layer.queue_free()
+		_tutorial_confirm_layer = null
+	)
+	btn_row.add_child(no_btn)
 
 
 # =====================
@@ -552,6 +680,9 @@ func _build_center_area() -> Control:
 		settings_panel.visible = true
 	)
 	vbox.add_child(settings_btn)
+
+	_add_spacer(vbox, 24)
+	vbox.add_child(_create_tutorial_button())
 
 	return center
 
@@ -825,7 +956,10 @@ func _update_profile_sidebar() -> void:
 	elo_label.text = str(PlayerData.elo_bullet)
 	high_score_label.text = str(PlayerData.solo_highscore)
 	points_label.text = str(PlayerData.total_points)
-	record_label.text = str(PlayerData.wins) + "W / " + str(PlayerData.losses) + "L / " + str(PlayerData.draws) + "D"
+	var _tw = PlayerData.wins_bullet   + PlayerData.wins_blitz   + PlayerData.wins_rapid
+	var _tl = PlayerData.losses_bullet + PlayerData.losses_blitz + PlayerData.losses_rapid
+	var _td = PlayerData.draws_bullet  + PlayerData.draws_blitz  + PlayerData.draws_rapid
+	record_label.text = str(_tw) + "W / " + str(_tl) + "L / " + str(_td) + "D"
 	winrate_label.text = (("%.0f%%" % PlayerData.get_win_rate()) if PlayerData.total_games > 0 else "—")
 
 # =====================
@@ -1668,7 +1802,12 @@ func _show_own_profile_popup() -> void:
 		"matches": PlayerData.matches,
 		"player_id": PlayerData.player_id
 	}
-	_show_profile_popup(data, true, "bullet")
+	var _last_mode := "bullet"
+	if PlayerData.matches.size() > 0:
+		var _last_m = PlayerData.matches[PlayerData.matches.size() - 1]
+		if _last_m is Dictionary and _last_m.has("time_mode"):
+			_last_mode = _last_m["time_mode"]
+	_show_profile_popup(data, true, _last_mode)
 
 func _show_profile_popup(data: Dictionary, is_own: bool = false, start_mode: String = "bullet") -> void:
 	for child in profile_popup.get_children():

@@ -5,7 +5,20 @@
       "Bash(Select-Object FullName)",
       "Bash(Sort-Object FullName)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\laser-chess\" -Recurse -Include \"*.gd\", \"project.godot\")",
-      "Bash(Select-Object -First 20 FullName)"
+      "Bash(Select-Object -First 20 FullName)",
+      "Bash(python -c ' *)",
+      "Bash(ls \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\LaserChess-Webserver\\\\\" && type \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\LaserChess-Webserver\\\\requirements.txt\" 2>nul || echo \"No requirements.txt found\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(where adb *)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\HP\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\")",
+      "Bash(dir /s /b \"C:\\\\Program Files\\\\Android\\\\*\\\\platform-tools\\\\adb.exe\")",
+      "Bash(git commit *)",
+      "PowerShell(& \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\Godot_v4.5.1-stable_win64.exe\" --headless --path \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\laser-chess\" --check-only --script \"res://scripts/ranked_match.gd\")",
+      "PowerShell($f = Get-Item \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\Godot_v4.5.1-stable_win64.exe\" -Force; $f.Attributes; $f.LinkType; $f.Target)",
+      "PowerShell(& \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\Godot_v4.5.1-stable_win64.exe\\\\Godot_v4.5.1-stable_win64_console.exe\" --headless --path \"C:\\\\Users\\\\HP\\\\Desktop\\\\godot\\\\laser-chess\" --quit-after 10 \"res://scenes/ranked_match.tscn\"; \"exit=$LASTEXITCODE\")"
     ]
   }
 }

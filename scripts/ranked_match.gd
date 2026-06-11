@@ -14,6 +14,7 @@ var match_duration: float = 90.0
 var _connect_retries: int = 0
 var _match_server_time: float = 0.0
 var _opponent_hat: String = ""
+var _leave_confirm_layer: CanvasLayer = null
 
 # === NODE REFERENCES ===
 var game_board: Node2D
@@ -146,6 +147,7 @@ func _on_disconnected() -> void:
 		hazard_spawner.is_active = false
 		hazard_spawner.spawn_timer.stop()
 		player.is_dead = true
+		PlayerData.apply_match_result("lose", my_best_score, opponent_best_score, opponent_name, opponent_elo, 0, _time_mode)
 		_show_connection_lost()
 	elif current_state != State.RESULTS:
 		_show_error("Disconnected from server.")
@@ -283,26 +285,27 @@ func _apply_styles() -> void:
 	opp_king_rect.size_flags_vertical   = Control.SIZE_SHRINK_CENTER
 	opp_king_rect.clip_contents = false
 
-	# ── Back button ──
+	# ── Back button (pill chip, matches menu screens) ──
 	var btn_normal := StyleBoxFlat.new()
-	btn_normal.bg_color = Color(0.1, 0.1, 0.15, 0.85)
-	btn_normal.set_corner_radius_all(12)
-	btn_normal.border_color = Color(0.3, 0.3, 0.4, 0.9)
-	btn_normal.set_border_width_all(2)
+	btn_normal.bg_color = Color(0.09, 0.10, 0.16, 0.9)
+	btn_normal.set_corner_radius_all(30)
+	btn_normal.border_color = Color(0.32, 0.34, 0.48, 0.55)
+	btn_normal.set_border_width_all(1)
 	back_button.add_theme_stylebox_override("normal", btn_normal)
 
 	var btn_hover := StyleBoxFlat.new()
-	btn_hover.bg_color = Color(0.15, 0.15, 0.22, 0.95)
-	btn_hover.set_corner_radius_all(12)
-	btn_hover.border_color = Color(0.45, 0.45, 0.55, 1.0)
-	btn_hover.set_border_width_all(2)
+	btn_hover.bg_color = Color(0.14, 0.15, 0.22, 0.95)
+	btn_hover.set_corner_radius_all(30)
+	btn_hover.border_color = Color(0.50, 0.52, 0.66, 0.8)
+	btn_hover.set_border_width_all(1)
 	back_button.add_theme_stylebox_override("hover", btn_hover)
 
 	var btn_pressed := StyleBoxFlat.new()
-	btn_pressed.bg_color = Color(0.08, 0.08, 0.12, 0.95)
-	btn_pressed.set_corner_radius_all(12)
+	btn_pressed.bg_color = Color(0.06, 0.07, 0.11, 0.95)
+	btn_pressed.set_corner_radius_all(30)
 	back_button.add_theme_stylebox_override("pressed", btn_pressed)
 	back_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	back_button.add_theme_color_override("font_color", Color(0.85, 0.87, 0.95))
 
 # =====================
 # ADAPTIVE LAYOUT
@@ -347,8 +350,9 @@ func _apply_layout() -> void:
 		timer_label.offset_top    = 12.0 + safe_top
 		timer_label.offset_bottom = 52.0 + safe_top
 
-		spectate_label.offset_top    = 55.0 + safe_top
-		spectate_label.offset_bottom = 88.0 + safe_top
+		# Below the back button (which sits under the timer in portrait)
+		spectate_label.offset_top    = 124.0 + safe_top
+		spectate_label.offset_bottom = 157.0 + safe_top
 
 		# Shrink score font to fit the compact strip
 		if my_score_label.label_settings:
@@ -359,15 +363,16 @@ func _apply_layout() -> void:
 		my_king_rect.visible  = false
 		opp_king_rect.visible = false
 
-		# Back button: top-left, same as landscape
+		# Back button: top middle, right below the timer — the corners are
+		# taken by the score panels, so it must not sit over them
 		back_button.anchor_top    = 0.0
 		back_button.anchor_bottom = 0.0
-		back_button.anchor_left   = 0.0
-		back_button.anchor_right  = 0.0
-		back_button.offset_left   = 20.0
-		back_button.offset_right  = 140.0
-		back_button.offset_top    = 20.0 + safe_top
-		back_button.offset_bottom = 80.0 + safe_top
+		back_button.anchor_left   = 0.5
+		back_button.anchor_right  = 0.5
+		back_button.offset_left   = -60.0
+		back_button.offset_right  = 60.0
+		back_button.offset_top    = 58.0 + safe_top
+		back_button.offset_bottom = 118.0 + safe_top
 	else:
 		# Landscape: panels span full height starting below the back button
 		my_panel.set_anchor(SIDE_LEFT,   0.0, false, false)
@@ -516,8 +521,19 @@ func _show_error(msg: String) -> void:
 	err_lbl.add_theme_color_override("font_color", Color(1.0, 0.52, 0.48))
 	inner.add_child(err_lbl)
 
-	_add_spacer(inner, 28)
-	_add_hint(inner, "SPACE  ·  retry          ESC  ·  go back")
+	_add_spacer(inner, 26)
+
+	var retry_btn := _create_action_button("RETRY", Color(0.16, 0.52, 0.30))
+	retry_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_show_connecting()
+		NetworkManager.connect_to_server()
+	)
+	inner.add_child(retry_btn)
+
+	if not GameSettings.is_mobile:
+		_add_spacer(inner, 16)
+		_add_hint(inner, "SPACE  ·  retry          ESC  ·  go back")
 
 func _show_finding_opponent() -> void:
 	current_state = State.LOBBY
@@ -697,19 +713,19 @@ func _add_hat_overlay(king_rect: TextureRect, hat_id: String) -> void:
 	if hat_id.is_empty() or not PlayerData.SHOP_HATS.has(hat_id):
 		return
 
-	# Mirror player.gd proportions:
-	#   hat_base_pos_tiles  = Vector2(0, -45)  (hat center above king center)
-	#   hat_base_scale      = 0.40             (hat = 40% of tile)
-	#   menu preview tile   = 80px
-	# We scale to king_rect.custom_minimum_size.y (56px).
-	var king_size: float  = king_rect.custom_minimum_size.y
-	var scale_factor: float = king_size / 80.0   # 56/80 = 0.70
+	# Mirror player.gd menu-preview proportions exactly:
+	#   king visual size  = tile_size * 0.8 = 80 * 0.8 = 64px  ← reference
+	#   hat size          = tile_size * hat_base_scale = 80 * 0.40 = 32px (50% of king visual)
+	#   hat Y from king   = hat_base_pos_tiles.y(-45) + menu_adj(+14) + hat_offset.y(+2) = -29px
+	#   hat X from king   = hat_offset.x(+1) + extra_pos.x (raw pixels, same as player.gd)
+	var king_size: float    = king_rect.custom_minimum_size.y
+	var scale_factor: float = king_size / 64.0   # king visual ref (80 * 0.8)
 	var tweaks: Dictionary  = PlayerData.HAT_TWEAKS.get(hat_id, {}) as Dictionary
 	var scale_mul: float    = float(tweaks.get("scale", 1.0))
-	var hat_size: float     = king_size * 0.40 * scale_mul
-	var y_offset: float     = -45.0 * scale_factor                              # above king center
-	var pos_tweak: Vector2  = (tweaks.get("pos", Vector2.ZERO) as Vector2) * scale_factor
-	var x_offset: float     = pos_tweak.x
+	var hat_size: float     = king_size * 0.50 * scale_mul
+	var extra_pos: Vector2  = tweaks.get("pos", Vector2.ZERO) as Vector2
+	var y_offset: float     = -29.0 * scale_factor + extra_pos.y               # above king center
+	var x_offset: float     = extra_pos.x + 1.0                                # +1 = hat_offset.x
 
 	var hat_spr := TextureRect.new()
 	hat_spr.texture      = load(PlayerData.SHOP_HATS[hat_id]["tex"])
@@ -914,7 +930,7 @@ func _show_results() -> void:
 	vbox.add_child(seed_lbl)
 
 	_add_spacer(vbox, 25)
-	_add_result_hints(vbox)
+	_add_result_buttons(vbox)
 
 	var fade = create_tween()
 	fade.tween_property(result_container, "modulate:a", 1.0, 0.4)
@@ -964,7 +980,7 @@ func _show_disconnect_win() -> void:
 	vbox.add_child(elo_lbl)
 
 	_add_spacer(vbox, 30)
-	_add_result_hints(vbox)
+	_add_result_buttons(vbox)
 
 	var fade = create_tween()
 	fade.tween_property(result_container, "modulate:a", 1.0, 0.4)
@@ -991,21 +1007,67 @@ func _show_connection_lost() -> void:
 	vbox.add_child(lbl)
 
 	_add_spacer(vbox, 35)
-	_add_result_hints(vbox)
+	_add_result_buttons(vbox)
 
 	var fade = create_tween()
 	fade.tween_property(result_container, "modulate:a", 1.0, 0.4)
 
-func _add_result_hints(vbox: VBoxContainer) -> void:
-	var restart = Label.new()
-	restart.text = "SPACE to play again"
-	restart.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	restart.add_theme_font_size_override("font_size", 22)
-	restart.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	vbox.add_child(restart)
-	_pulse(restart, 0.6)
-	_add_spacer(vbox, 8)
-	_add_hint(vbox, "ESC for menu")
+func _add_result_buttons(vbox: VBoxContainer) -> void:
+	var again_btn := _create_action_button("PLAY AGAIN", Color(0.16, 0.52, 0.30))
+	again_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_back_to_queue()
+	)
+	vbox.add_child(again_btn)
+
+	_add_spacer(vbox, 14)
+
+	var menu_btn := _create_action_button("MENU", Color(0.27, 0.29, 0.38))
+	menu_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_do_leave()
+	)
+	vbox.add_child(menu_btn)
+
+	if not GameSettings.is_mobile:
+		_add_spacer(vbox, 16)
+		_add_hint(vbox, "SPACE  ·  play again          ESC  ·  menu")
+
+func _create_action_button(text: String, color: Color) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	if GameSettings.is_mobile:
+		btn.custom_minimum_size = Vector2(520, 96)
+		btn.add_theme_font_size_override("font_size", 32)
+	else:
+		btn.custom_minimum_size = Vector2(340, 64)
+		btn.add_theme_font_size_override("font_size", 24)
+	btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	btn.add_theme_color_override("font_color", Color.WHITE)
+
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = color
+	normal.set_corner_radius_all(12)
+	normal.border_color = color.lightened(0.2)
+	normal.set_border_width_all(2)
+	normal.shadow_color = Color(0, 0, 0, 0.4)
+	normal.shadow_size = 6
+	normal.shadow_offset = Vector2(0, 4)
+	btn.add_theme_stylebox_override("normal", normal)
+
+	var hover := StyleBoxFlat.new()
+	hover.bg_color = color.lightened(0.12)
+	hover.set_corner_radius_all(12)
+	hover.border_color = color.lightened(0.3)
+	hover.set_border_width_all(2)
+	btn.add_theme_stylebox_override("hover", hover)
+
+	var pressed := StyleBoxFlat.new()
+	pressed.bg_color = color.darkened(0.15)
+	pressed.set_corner_radius_all(12)
+	btn.add_theme_stylebox_override("pressed", pressed)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	return btn
 
 func _clear_result_content() -> void:
 	for child in result_container.get_children():
@@ -1023,9 +1085,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.keycode == KEY_ESCAPE:
 		SoundManager.play("click")
-		NetworkManager.leave_queue()
-		NetworkManager.disconnect_from_server()
-		get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
+		if current_state == State.PLAYING or current_state == State.COUNTDOWN:
+			_show_leave_confirmation()
+		else:
+			_do_leave()
 		return
 
 	if current_state == State.CONNECTING and not NetworkManager.is_online():
@@ -1159,6 +1222,107 @@ func _pulse(node: Control, duration: float = 0.6) -> void:
 
 func _on_back_button_pressed() -> void:
 	SoundManager.play("click")
+	if current_state == State.PLAYING or current_state == State.COUNTDOWN:
+		_show_leave_confirmation()
+	else:
+		_do_leave()
+
+func _do_leave() -> void:
 	NetworkManager.leave_queue()
 	NetworkManager.disconnect_from_server()
 	get_tree().change_scene_to_file("res://scenes/mode_select.tscn")
+
+func _show_leave_confirmation() -> void:
+	if _leave_confirm_layer != null:
+		return  # Already showing
+
+	_leave_confirm_layer = CanvasLayer.new()
+	_leave_confirm_layer.layer = 200
+	add_child(_leave_confirm_layer)
+
+	# Dim backdrop
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.0, 0.0, 0.0, 0.65)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	_leave_confirm_layer.add_child(backdrop)
+
+	# Centered dialog box
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_leave_confirm_layer.add_child(center)
+
+	var box := PanelContainer.new()
+	var box_style := StyleBoxFlat.new()
+	box_style.bg_color = Color(0.08, 0.09, 0.13, 0.97)
+	box_style.set_corner_radius_all(16)
+	box_style.border_color = Color(0.9, 0.3, 0.2, 0.9)
+	box_style.set_border_width_all(2)
+	box_style.set_content_margin_all(28)
+	box.add_theme_stylebox_override("panel", box_style)
+	box.custom_minimum_size = Vector2(320, 0)
+	center.add_child(box)
+
+	var vbox := VBoxContainer.new()
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 14)
+	box.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "Leave Match?"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 28)
+	title.add_theme_color_override("font_color", Color(1.0, 0.9, 0.9))
+	vbox.add_child(title)
+
+	var body := Label.new()
+	body.text = "You will forfeit and lose ELO."
+	body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	body.add_theme_font_size_override("font_size", 16)
+	body.add_theme_color_override("font_color", Color(0.65, 0.65, 0.75))
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(body)
+
+	_add_spacer(vbox, 4)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn_row.add_theme_constant_override("separation", 12)
+	vbox.add_child(btn_row)
+
+	var stay_btn := Button.new()
+	stay_btn.text = "STAY"
+	stay_btn.custom_minimum_size = Vector2(110, 42)
+	var stay_style := StyleBoxFlat.new()
+	stay_style.bg_color = Color(0.12, 0.35, 0.18, 0.95)
+	stay_style.set_corner_radius_all(10)
+	stay_style.border_color = Color(0.2, 0.8, 0.4, 0.8)
+	stay_style.set_border_width_all(2)
+	stay_btn.add_theme_stylebox_override("normal", stay_style)
+	stay_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	stay_btn.add_theme_font_size_override("font_size", 16)
+	stay_btn.add_theme_color_override("font_color", Color(0.3, 1.0, 0.55))
+	stay_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_leave_confirm_layer.queue_free()
+		_leave_confirm_layer = null
+	)
+	btn_row.add_child(stay_btn)
+
+	var leave_btn := Button.new()
+	leave_btn.text = "LEAVE"
+	leave_btn.custom_minimum_size = Vector2(110, 42)
+	var leave_style := StyleBoxFlat.new()
+	leave_style.bg_color = Color(0.35, 0.08, 0.06, 0.95)
+	leave_style.set_corner_radius_all(10)
+	leave_style.border_color = Color(0.85, 0.2, 0.15, 0.8)
+	leave_style.set_border_width_all(2)
+	leave_btn.add_theme_stylebox_override("normal", leave_style)
+	leave_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	leave_btn.add_theme_font_size_override("font_size", 16)
+	leave_btn.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3))
+	leave_btn.pressed.connect(func():
+		SoundManager.play("click")
+		_do_leave()
+	)
+	btn_row.add_child(leave_btn)

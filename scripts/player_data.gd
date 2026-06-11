@@ -484,21 +484,53 @@ func _on_profile_loaded(_result: int, code: int, _headers: PackedStringArray,
 		wins          = int(d.get("wins", wins))
 		losses        = int(d.get("losses", losses))
 		draws         = int(d.get("draws", draws))
-		wins_bullet   = int(d.get("wins_bullet", 0))
-		losses_bullet = int(d.get("losses_bullet", 0))
-		draws_bullet  = int(d.get("draws_bullet", 0))
-		wins_blitz    = int(d.get("wins_blitz", 0))
-		losses_blitz  = int(d.get("losses_blitz", 0))
-		draws_blitz   = int(d.get("draws_blitz", 0))
-		wins_rapid    = int(d.get("wins_rapid", 0))
-		losses_rapid  = int(d.get("losses_rapid", 0))
-		draws_rapid   = int(d.get("draws_rapid", 0))
+		wins_bullet   = int(d.get("wins_bullet",   wins_bullet))
+		losses_bullet = int(d.get("losses_bullet", losses_bullet))
+		draws_bullet  = int(d.get("draws_bullet",  draws_bullet))
+		wins_blitz    = int(d.get("wins_blitz",    wins_blitz))
+		losses_blitz  = int(d.get("losses_blitz",  losses_blitz))
+		draws_blitz   = int(d.get("draws_blitz",   draws_blitz))
+		wins_rapid    = int(d.get("wins_rapid",    wins_rapid))
+		losses_rapid  = int(d.get("losses_rapid",  losses_rapid))
+		draws_rapid   = int(d.get("draws_rapid",   draws_rapid))
 		matches = d.get("matches", matches)
 		if matches == null:
 			matches = []
+		var per_mode_empty = (wins_bullet + losses_bullet + draws_bullet +
+							  wins_blitz  + losses_blitz  + draws_blitz  +
+							  wins_rapid  + losses_rapid  + draws_rapid) == 0
+		if per_mode_empty and (wins + losses + draws) > 0:
+			_rebuild_per_mode_from_history()
+			save_to_firebase()
 		_save_local()
 
 	profile_loaded.emit()
+
+func _rebuild_per_mode_from_history() -> void:
+	wins_bullet = 0; losses_bullet = 0; draws_bullet = 0
+	wins_blitz  = 0; losses_blitz  = 0; draws_blitz  = 0
+	wins_rapid  = 0; losses_rapid  = 0; draws_rapid  = 0
+	for m in matches:
+		if not m is Dictionary:
+			continue
+		var mode   = m.get("time_mode", "bullet")
+		var result = m.get("result", "")
+		match mode:
+			"blitz":
+				match result:
+					"win":  wins_blitz   += 1
+					"lose": losses_blitz += 1
+					"draw": draws_blitz  += 1
+			"rapid":
+				match result:
+					"win":  wins_rapid   += 1
+					"lose": losses_rapid += 1
+					"draw": draws_rapid  += 1
+			_:
+				match result:
+					"win":  wins_bullet   += 1
+					"lose": losses_bullet += 1
+					"draw": draws_bullet  += 1
 
 # =====================
 # FIREBASE — LEADERBOARD

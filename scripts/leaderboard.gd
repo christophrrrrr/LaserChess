@@ -1041,42 +1041,46 @@ func _setup_back_button() -> void:
 		var r2 := DisplayServer.get_display_safe_area()
 		safe_top_back = maxi(r2.position.y, 72)
 
+	# Pill chip inside the header strip, vertically aligned with the title
 	var btn = Button.new()
 	btn.text = "< BACK"  # ASCII compatible
 	btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	if GameSettings.is_mobile:
-		btn.position = Vector2(20, safe_top_back + 20)
-		btn.custom_minimum_size = Vector2(160, 80)
-		btn.add_theme_font_size_override("font_size", 28)
+		btn.position = Vector2(20, safe_top_back + 8)
+		btn.custom_minimum_size = Vector2(140, 64)
+		btn.add_theme_font_size_override("font_size", 24)
 	else:
-		btn.position = Vector2(20, 20)
-		btn.custom_minimum_size = Vector2(120, 60)
-		btn.add_theme_font_size_override("font_size", 22)
-	btn.add_theme_color_override("font_color", Color.WHITE)
+		btn.position = Vector2(20, 16)
+		btn.custom_minimum_size = Vector2(110, 48)
+		btn.add_theme_font_size_override("font_size", 18)
+	btn.add_theme_color_override("font_color", Color(0.85, 0.87, 0.95))
 	_style_back_button(btn)
 	btn.pressed.connect(_on_back_button_pressed)
 	root.add_child(btn)
 
 func _style_back_button(btn: Button) -> void:
+	# Pill shape: radius = half the button height
+	var radius := int(btn.custom_minimum_size.y / 2.0)
+
 	var normal = StyleBoxFlat.new()
-	normal.bg_color = Color(0.1, 0.1, 0.15, 0.85)
-	normal.set_corner_radius_all(12)
-	normal.border_color = Color(0.3, 0.3, 0.4, 0.9)
-	normal.set_border_width_all(2)
+	normal.bg_color = Color(0.09, 0.10, 0.16, 0.9)
+	normal.set_corner_radius_all(radius)
+	normal.border_color = Color(0.32, 0.34, 0.48, 0.55)
+	normal.set_border_width_all(1)
 	btn.add_theme_stylebox_override("normal", normal)
-	
+
 	var hover = StyleBoxFlat.new()
-	hover.bg_color = Color(0.15, 0.15, 0.22, 0.95)
-	hover.set_corner_radius_all(12)
-	hover.border_color = Color(0.45, 0.45, 0.55, 1.0)
-	hover.set_border_width_all(2)
+	hover.bg_color = Color(0.14, 0.15, 0.22, 0.95)
+	hover.set_corner_radius_all(radius)
+	hover.border_color = Color(0.50, 0.52, 0.66, 0.8)
+	hover.set_border_width_all(1)
 	btn.add_theme_stylebox_override("hover", hover)
-	
+
 	var pressed = StyleBoxFlat.new()
-	pressed.bg_color = Color(0.08, 0.08, 0.12, 0.95)
-	pressed.set_corner_radius_all(12)
+	pressed.bg_color = Color(0.06, 0.07, 0.11, 0.95)
+	pressed.set_corner_radius_all(radius)
 	btn.add_theme_stylebox_override("pressed", pressed)
-	
+
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 func _on_back_button_pressed() -> void:
