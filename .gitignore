@@ -1,3 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Editor/Windows save leftovers (interrupted-save rename artifacts)
+*.tmp
+*.TMP
