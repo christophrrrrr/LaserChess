@@ -2,7 +2,6 @@
 
 A real-time multiplayer arcade game built in Godot 4.5 and shipped for web and Android. Players survive an ever-escalating hazard board across three ranked time controls while competing on a global leaderboard.
 
-**[Play in Browser](https://christoph.itch.io/laser-chess)** &nbsp;·&nbsp; **[Android APK / .aab](Export/laserchess.zip)**
 
 ---
 
